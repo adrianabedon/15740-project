@@ -183,25 +183,26 @@ bool find_empty_slot(bucket_t buckets[NUM_BUCKETS],
                      atindex_t *insert_loc,
                      atindex_t *head)
 {
-    for (slotidx_t slot_idx = 0; slot_idx < NUM_SLOTS; slot_idx++)
-    {
-        slot_t &slot1 = buckets[hash1_val].slots[slot_idx];
-        slot_t &slot2 = buckets[hash2_val].slots[slot_idx];
+        slotidx_t slot1_idx = buckets[hash1_val].collision_slot;
+        slotidx_t slot2_idx = buckets[hash2_val].collision_slot;
+        slot_t &slot1 = buckets[hash1_val].slots[slot1_idx];
+        slot_t &slot2 = buckets[hash2_val].slots[slot2_idx];
         if (slot1.status == 0)
         {
-            *hash_out = hash1_val;
+            buckets[hash1_val].collision_slot = (buckets[hash1_val].collision_slot + 1) % NUM_SLOTS;
 
-            start_at_empty_chain(address_table_sizes, slot_idx, hash2_val, &slot1, slot_out, insert_loc, head);
+            *hash_out = hash1_val;
+            start_at_empty_chain(address_table_sizes, slot1_idx, hash2_val, &slot1, slot_out, insert_loc, head);
             return true;
         }
         if (slot2.status == 0)
         {
-            *hash_out = hash2_val;
+            buckets[hash2_val].collision_slot = (buckets[hash2_val].collision_slot + 1) % NUM_SLOTS;
 
-            start_at_empty_chain(address_table_sizes, slot_idx, hash1_val, &slot2, slot_out, insert_loc, head);
+            *hash_out = hash2_val;
+            start_at_empty_chain(address_table_sizes, slot2_idx, hash1_val, &slot2, slot_out, insert_loc, head);
             return true;
         }
-    }
     return false;
 }
 
