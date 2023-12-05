@@ -1,4 +1,5 @@
 #include <cassert>
+#include <iostream>
 #include "join.h"
 
 CHashJoin::CHashJoin()
@@ -178,29 +179,30 @@ void CHashJoin::Build(std::vector<input_tuple_t> &relR)
     }
 }
 
-bool CHashJoin::search_slot(hash_t hash, slotidx_t slot_idx, Key_t key, std::vector<output_tuple_t> &relRS)
+bool CHashJoin::search_slot(hash_t hash, slotidx_t slot_idx, RID_t rid, Key_t key, std::vector<output_tuple_t> &relRS)
 {
     bucket_t &bucket = buckets[hash];
     slot_t &slot = bucket.slots[slot_idx];
 
     if (slot.status == 0)
     {
-        return;
+        return false;
     }
 
     address_table_t &address_table = address_tables[slot_idx];
     atindex_t curr = slot.head;
 
-    while (curr != 0)
+    // search collision chain
+    do
     {
         if (address_table.entries[curr].key == key)
         {
-            relRS.push_back({address_table.entries[curr].rid, 0, address_table.entries[curr].key});
+            relRS.push_back({address_table.entries[curr].rid, rid, key});
             // only need to find one match
             return true;
         }
         curr = address_table.entries[curr].next;
-    }
+    } while (curr != 0);
 
     return false;
 }
@@ -214,11 +216,11 @@ void CHashJoin::Probe(std::vector<input_tuple_t> &relS, std::vector<output_tuple
 
         for (int slot_idx = 0; slot_idx < NUM_SLOTS; slot_idx++)
         {
-            if (search_slot(hash1_val, slot_idx, tuple.key, relRS))
+            if (search_slot(hash1_val, slot_idx, tuple.rid, tuple.key, relRS))
             {
                 break;
             }
-            if (search_slot(hash2_val, slot_idx, tuple.key, relRS))
+            if (search_slot(hash2_val, slot_idx, tuple.rid, tuple.key, relRS))
             {
                 break;
             }

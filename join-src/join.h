@@ -6,7 +6,7 @@
 
 #define HASH_BITS 12
 #define NUM_SLOTS 4
-#define NUM_BUCKETS (2 >> HASH_BITS) // 2^12 = 4096
+#define NUM_BUCKETS (2 << HASH_BITS) // 2^12 = 4096
 #define NUM_ADDRESS_TABLES_SLOT 5000 // this is the number of slots in each address table
                                      // max size of inner relation in NUM_SLOT * NUM_ADDRESS_TABLES_SLOT
 
@@ -82,10 +82,10 @@ public:
   void Join(std::vector<input_tuple_t> &relR, std::vector<input_tuple_t> &relS, std::vector<output_tuple_t> &relRS);
 
 private:
-  bool CHashJoin::insert_tuple_to_empty_slot(hash_t hash, atindex_t slot_idx, RID_t rid, Key_t key, hash_t tag);
-  void CHashJoin::insert_tuple_to_collision_slot(hash_t hash, RID_t rid, Key_t key);
-  bool CHashJoin::eject_slot(hash_t hash, slotidx_t slot_idx);
-  bool CHashJoin::search_slot(hash_t hash, slotidx_t slot_idx, Key_t key, std::vector<output_tuple_t> &relRS);
+  bool insert_tuple_to_empty_slot(hash_t hash, atindex_t slot_idx, RID_t rid, Key_t key, hash_t tag);
+  void insert_tuple_to_collision_slot(hash_t hash, RID_t rid, Key_t key);
+  bool eject_slot(hash_t hash, slotidx_t slot_idx);
+  bool search_slot(hash_t hash, slotidx_t slot_idx, RID_t rid, Key_t key, std::vector<output_tuple_t> &relRS);
   void Build(std::vector<input_tuple_t> &relR);
   void Probe(std::vector<input_tuple_t> &relS, std::vector<output_tuple_t> &relRS);
 
