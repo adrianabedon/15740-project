@@ -1,4 +1,6 @@
 #include <iostream>
+#include <random> // Add this line to include the <random> header
+#include <algorithm>
 #include "join.h"
 
 void load_tuples1(std::vector<input_tuple_t> &relR)
@@ -143,17 +145,23 @@ void load_tuples2(std::vector<input_tuple_t> &relS)
     relS.push_back(tuple);
 }
 
-int main() {
+int main()
+{
     CHashJoin *join = new CHashJoin();
     std::vector<input_tuple_t> relR;
     std::vector<input_tuple_t> relS;
+
     std::vector<output_tuple_t> relRS;
 
     std::cout << "Loading tuples..." << std::endl;
     load_tuples1(relR);
     load_tuples2(relS);
 
-    std::cout << "Joining..." << std::endl; 
+    // randomize relR
+    std::mt19937 g(1000);
+    std::shuffle(relR.begin(), relR.end(), g); // Use std::shuffle instead of std::random_shuffle
+
+    std::cout << "Joining..." << std::endl;
     join->Join(relR, relS, relRS);
 
     std::cout << "Printing..." << std::endl;

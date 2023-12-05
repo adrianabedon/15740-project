@@ -63,7 +63,6 @@ typedef struct
 typedef struct
 {
   address_table_entry_t entries[NUM_ADDRESS_TABLES_SLOT];
-  atindex_t size;
 } address_table_t;
 
 class CHashJoin
@@ -82,14 +81,16 @@ public:
   void Join(std::vector<input_tuple_t> &relR, std::vector<input_tuple_t> &relS, std::vector<output_tuple_t> &relRS);
 
 private:
-  bool insert_tuple_to_empty_slot(hash_t hash, atindex_t slot_idx, RID_t rid, Key_t key, hash_t tag);
-  void insert_tuple_to_collision_slot(hash_t hash, RID_t rid, Key_t key);
-  bool eject_slot(hash_t hash, slotidx_t slot_idx);
+  // bool find_empty_slot(hash_t hash1_val, hash_t hash2_val, hash_t *hash_out, slotidx_t *slot_out);
+  // bool insert_tuple_to_empty_slot(hash_t hash, atindex_t slot_idx, RID_t rid, Key_t key, hash_t tag);
+  // void insert_tuple_to_collision_slot(hash_t hash, RID_t rid, Key_t key);
+  // bool eject_slot(hash_t hash, slotidx_t slot_idx);
   bool search_slot(hash_t hash, slotidx_t slot_idx, RID_t rid, Key_t key, std::vector<output_tuple_t> &relRS);
   void Build(std::vector<input_tuple_t> &relR);
   void Probe(std::vector<input_tuple_t> &relS, std::vector<output_tuple_t> &relRS);
 
   bucket_t buckets[NUM_BUCKETS];
+  atindex_t address_table_sizes[NUM_SLOTS];
   // NUM_SLOTS address tables
   address_table_t address_tables[NUM_SLOTS];
 };
