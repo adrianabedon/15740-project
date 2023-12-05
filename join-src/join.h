@@ -85,6 +85,7 @@ private:
   bool CHashJoin::insert_tuple_to_empty_slot(hash_t hash, atindex_t slot_idx, RID_t rid, Key_t key, hash_t tag);
   void CHashJoin::insert_tuple_to_collision_slot(hash_t hash, RID_t rid, Key_t key);
   bool CHashJoin::eject_slot(hash_t hash, slotidx_t slot_idx);
+  bool CHashJoin::search_slot(hash_t hash, slotidx_t slot_idx, Key_t key, std::vector<output_tuple_t> &relRS);
   void Build(std::vector<input_tuple_t> &relR);
   void Probe(std::vector<input_tuple_t> &relS, std::vector<output_tuple_t> &relRS);
 
