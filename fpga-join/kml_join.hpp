@@ -1,8 +1,4 @@
-#ifndef __JOIN_H__
-#define __JOIN_H__
-
-#include <vector>
-#include <cstdint>
+#include "xcl2.hpp"
 
 #define HASH_BITS 12
 #define NUM_SLOTS 4
@@ -15,8 +11,8 @@
  * relation can only map to one tuple in the first relation.
  */
 
-typedef uint8_t slotidx_t;
-typedef uint16_t hash_t;
+typedef ap_uint<2> slotidx_t;
+typedef ap_uint<HASH_BITS> hash_t;
 typedef uint16_t atindex_t;
 typedef int RID_t;
 typedef int Key_t;
@@ -64,35 +60,3 @@ typedef struct
 {
   address_table_entry_t entries[NUM_ADDRESS_TABLES_SLOT];
 } address_table_t;
-
-class CHashJoin
-{
-public:
-  CHashJoin();
-  ~CHashJoin();
-  /**
-   * @brief
-   *
-   * @param relR Inner relation
-   * @param relS Outer relation
-   * @param relRS Result relation #TODO FIX THIS TYPE
-   *
-   */
-  void Join(std::vector<input_tuple_t> &relR, std::vector<input_tuple_t> &relS, std::vector<output_tuple_t> &relRS);
-
-private:
-  // bool find_empty_slot(hash_t hash1_val, hash_t hash2_val, hash_t *hash_out, slotidx_t *slot_out);
-  // bool insert_tuple_to_empty_slot(hash_t hash, atindex_t slot_idx, RID_t rid, Key_t key, hash_t tag);
-  // void insert_tuple_to_collision_slot(hash_t hash, RID_t rid, Key_t key);
-  // bool eject_slot(hash_t hash, slotidx_t slot_idx);
-  bool search_slot(hash_t hash, slotidx_t slot_idx, RID_t rid, Key_t key, std::vector<output_tuple_t> &relRS);
-  void Build(std::vector<input_tuple_t> &relR);
-  void Probe(std::vector<input_tuple_t> &relS, std::vector<output_tuple_t> &relRS);
-
-  bucket_t buckets[NUM_BUCKETS];
-  atindex_t address_table_sizes[NUM_SLOTS];
-  // NUM_SLOTS address tables
-  address_table_t address_tables[NUM_SLOTS];
-};
-
-#endif // __JOIN_H__
