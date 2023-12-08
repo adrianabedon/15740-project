@@ -104,7 +104,6 @@ void select_slot(bucket_t buckets[NUM_BUCKETS],
                  atindex_t address_table_sizes[NUM_SLOTS],
                  hash_t hash1_val,
                  hash_t hash2_val,
-                 hash_t *hash_out,
                  slotidx_t *slot_out,
                  atindex_t *insert_loc,
                  atindex_t *head)
@@ -117,7 +116,6 @@ void select_slot(bucket_t buckets[NUM_BUCKETS],
         if (eject_slot(buckets, hash1_val, slot_idx))
         {
             std::cout << "ejected slot " << slot_idx << std::endl;
-            *hash_out = hash1_val;
 
             start_at_empty_chain(address_table_sizes, slot_idx, hash2_val, &slot1, slot_out, insert_loc, head);
             return;
@@ -125,7 +123,6 @@ void select_slot(bucket_t buckets[NUM_BUCKETS],
         if (eject_slot(buckets, hash2_val, slot_idx))
         {
             std::cout << "ejected slot " << slot_idx << std::endl;
-            *hash_out = hash2_val;
 
             start_at_empty_chain(address_table_sizes, slot_idx, hash1_val, &slot2, slot_out, insert_loc, head);
             return;
@@ -136,7 +133,6 @@ void select_slot(bucket_t buckets[NUM_BUCKETS],
     slotidx_t slot_idx = buckets[hash1_val].collision_slot;
     buckets[hash1_val].collision_slot = (buckets[hash1_val].collision_slot + 1) % NUM_SLOTS;
 
-    *hash_out = hash1_val;
     *slot_out = slot_idx;
 
     // set insert location to end of address table
@@ -178,7 +174,6 @@ bool find_empty_slot(bucket_t buckets[NUM_BUCKETS],
                      atindex_t address_table_sizes[NUM_SLOTS],
                      hash_t hash1_val,
                      hash_t hash2_val,
-                     hash_t *hash_out,
                      slotidx_t *slot_out,
                      atindex_t *insert_loc,
                      atindex_t *head)
@@ -191,7 +186,6 @@ bool find_empty_slot(bucket_t buckets[NUM_BUCKETS],
         {
             buckets[hash1_val].collision_slot = (buckets[hash1_val].collision_slot + 1) % NUM_SLOTS;
 
-            *hash_out = hash1_val;
             start_at_empty_chain(address_table_sizes, slot1_idx, hash2_val, &slot1, slot_out, insert_loc, head);
             return true;
         }
@@ -199,7 +193,6 @@ bool find_empty_slot(bucket_t buckets[NUM_BUCKETS],
         {
             buckets[hash2_val].collision_slot = (buckets[hash2_val].collision_slot + 1) % NUM_SLOTS;
 
-            *hash_out = hash2_val;
             start_at_empty_chain(address_table_sizes, slot2_idx, hash1_val, &slot2, slot_out, insert_loc, head);
             return true;
         }
@@ -214,17 +207,16 @@ void CHashJoin::Build(std::vector<input_tuple_t> &relR)
         hash_t hash1_val = hash1(tuple.key);
         hash_t hash2_val = hash2(tuple.key);
         bool slot_found = false;
-        hash_t insert_bucket;
         slotidx_t insert_slot;
         atindex_t insert_loc;
         atindex_t head;
 
-        slot_found = find_empty_slot(buckets, address_table_sizes, hash1_val, hash2_val, &insert_bucket, &insert_slot, &insert_loc, &head);
+        slot_found = find_empty_slot(buckets, address_table_sizes, hash1_val, hash2_val, &insert_slot, &insert_loc, &head);
 
         if (!slot_found)
         {
             std::cout << "slot not found for tuple with key " << tuple.key << std::endl;
-            select_slot(buckets, address_table_sizes, hash1_val, hash2_val, &insert_bucket, &insert_slot, &insert_loc, &head);
+            select_slot(buckets, address_table_sizes, hash1_val, hash2_val, &insert_slot, &insert_loc, &head);
         }
         insert_tuple_to_address_table(&address_tables[insert_slot], head, insert_loc, tuple.rid, tuple.key);
     }

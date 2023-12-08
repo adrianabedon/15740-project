@@ -12,7 +12,6 @@ static const std::string error_message =
 
 int main(int argc, char *argv[])
 {
-
   // TARGET_DEVICE macro needs to be passed from gcc command line
   if (argc != 2)
   {
