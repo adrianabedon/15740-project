@@ -76,11 +76,32 @@ bool eject_slot(bucket_t buckets[NUM_BUCKETS], hash_t hash, slotidx_t slot_idx)
 }
 
 static void find_slot(bucket_t buckets[NUM_BUCKETS],
-                      atindex_t address_table_sizes[NUM_SLOTS],
                       hls::stream<tuple_stream_in_t> &tuple_stream,
                       hls::stream<insert_stream_t> &insert_stream,
                       int numR)
 {
+  atindex_t address_table_sizes[NUM_SLOTS];
+#pragma HLS ARRAY_RESHAPE variable = address_table_sizes type = complete dim = 1
+
+  /** Initialize structures */
+  for (int i = 0; i < NUM_BUCKETS; i++)
+  {
+    buckets[i].collision_slot = i & (NUM_SLOTS - 1);
+    for (int j = 0; j < NUM_SLOTS; j++)
+    {
+#pragma HLS unroll
+      buckets[i].slots[j].status = 0;
+    }
+  }
+
+  for (int i = 0; i < NUM_SLOTS; i++)
+  {
+#pragma HLS unroll
+    address_table_sizes[i] = 0;
+  }
+
+  /** Start finding slots */
+
   for (int i = 0; i < numR; i++)
   {
     tuple_stream_in_t tuple = tuple_stream.read();
@@ -112,8 +133,8 @@ static void find_slot(bucket_t buckets[NUM_BUCKETS],
       /** No empty slot, try to eject a slot. */
       for (int slot_idx_ = 0; slot_idx_ < NUM_SLOTS; slot_idx_++)
       {
-        slotidx_t slot_idx = (slotidx_t)(unsigned int)slot_idx_;
 #pragma HLS unroll
+        slotidx_t slot_idx = (slotidx_t)(unsigned int)slot_idx_;
         if (eject_slot(buckets, hash1, slot_idx))
         {
           chain = false;
@@ -210,21 +231,12 @@ static void insert_into_address_table(address_table_t address_tables[NUM_SLOTS],
 
 static void build(bucket_t buckets[NUM_BUCKETS], address_table_t address_tables[NUM_SLOTS], input_tuple_t *relR, int numR)
 {
-  atindex_t address_table_sizes[NUM_SLOTS];
-#pragma HLS ARRAY_RESHAPE variable = address_tables type = complete dim = 1
-
-  for (int i = 0; i < NUM_SLOTS; i++)
-  {
-#pragma HLS unroll
-    address_table_sizes[i] = 0;
-  }
-
   static hls::stream<tuple_stream_in_t> tuple_stream;
   static hls::stream<insert_stream_t> insert_stream;
 
 #pragma HLS DATAFLOW
   get_new_tuple(relR, tuple_stream, numR);
-  find_slot(buckets, address_table_sizes, tuple_stream, insert_stream, numR);
+  find_slot(buckets, tuple_stream, insert_stream, numR);
   insert_into_address_table(address_tables, insert_stream, numR);
 }
 
@@ -329,16 +341,6 @@ extern "C"
     bucket_t buckets[NUM_BUCKETS];
     address_table_t address_tables[NUM_SLOTS];
 #pragma HLS ARRAY_RESHAPE variable = address_tables type = complete dim = 1
-
-    for (int i = 0; i < NUM_BUCKETS; i++)
-    {
-      buckets[i].collision_slot = i & (NUM_SLOTS - 1);
-      for (int j = 0; j < NUM_SLOTS; j++)
-      {
-#pragma HLS unroll
-        buckets[i].slots[j].status = 0;
-      }
-    }
 
     build(buckets, address_tables, relR, numR);
     probe(buckets, address_tables, relS, relRS, numS);
