@@ -24,8 +24,8 @@ int main(int argc, char *argv[])
   char *xclbinFilename = argv[1];
 
   // Compute the size of array in bytes
-  size_t input_size_in_bytes = DATA_SIZE * (sizeof(int)*2);
-  size_t output_size_in_bytes = DATA_SIZE * (sizeof(int)*3);
+  size_t input_size_in_bytes = DATA_SIZE * (sizeof(input_tuple_t));
+  size_t output_size_in_bytes = DATA_SIZE * (sizeof(output_tuple_t));
 
   // Creates a vector of DATA_SIZE elements with an initial value of 10 and 32
   // using customized allocator for getting buffer alignment to 4k boundary
@@ -124,6 +124,12 @@ int main(int argc, char *argv[])
   q.enqueueMigrateMemObjects({buffer_result}, CL_MIGRATE_MEM_OBJECT_HOST);
 
   q.finish();
+
+  // print result
+  for (int i = 0; i < DATA_SIZE; i++)
+  {
+    std::cout << "result[" << i << "]: " << ptr_result[i].rid1 << " " << ptr_result[i].rid2 << " " << ptr_result[i].key << std::endl;
+  }
 
   // Verify the result
   // int match = 0;
