@@ -1,4 +1,6 @@
 #include "xcl2.hpp"
+#include <ap_int.h>
+#include <hls_stream.h>
 
 #define HASH_BITS 12
 #define NUM_SLOTS 4

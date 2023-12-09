@@ -4,8 +4,8 @@ typedef struct tuple_stream_in
 {
   RID_t rid;
   Key_t key;
-  Hash_t hash1;
-  Hash_t hash2;
+  hash_t hash1;
+  hash_t hash2;
 } tuple_stream_in_t;
 
 typedef struct select_stream_in
