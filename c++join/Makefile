@@ -40,7 +40,7 @@ all: join-example
 
 # print to stdout that compilation is starting
 
-$(BUILD)/obj/%.o: join-src/%.cpp
+$(BUILD)/obj/%.o: %.cpp
 	$(QUIET_ECHO) $@: Compiling object
 	@ mkdir -p $(dir $(BUILD)/dep/$<)
 	@ g++ $(CCFLAGS) -M -MG -MQ $@ -DCOMPILINGDEPENDENCIES \
