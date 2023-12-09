@@ -340,7 +340,7 @@ static void search(bucket_t buckets[NUM_BUCKETS],
         atindex_t head = buckets[hash1].slots[slot_idx].head;
         search_address_table(address_tables, slot_idx, tuple.rid, tuple.key, head, output_stream, eos);
       }
-      if (buckets[hash2].slots[slot_idx].status == 1)
+    if (hash1 != hash2 && buckets[hash2].slots[slot_idx].status == 1)
       {
         atindex_t head = buckets[hash2].slots[slot_idx].head;
         search_address_table(address_tables, slot_idx, tuple.rid, tuple.key, head, output_stream, eos);
