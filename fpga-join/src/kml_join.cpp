@@ -153,7 +153,6 @@ static void find_slot(bucket_t buckets[NUM_BUCKETS],
     address_table_sizes[insert_slot] = at_insert_loc + 1;
 
     buckets[insert_bucket].slots[insert_slot].status = 1;
-    buckets[insert_bucket].slots[insert_slot].tag = tag;
     if (chain)
     {
       head = buckets[insert_bucket].slots[insert_slot].head;
@@ -161,6 +160,7 @@ static void find_slot(bucket_t buckets[NUM_BUCKETS],
     else
     {
       head = at_insert_loc;
+      buckets[insert_bucket].slots[insert_slot].tag = tag;
       buckets[insert_bucket].slots[insert_slot].head = head;
     }
 
