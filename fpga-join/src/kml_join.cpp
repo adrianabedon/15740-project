@@ -9,15 +9,6 @@ typedef struct tuple_stream_in
   hash_t hash2;
 } tuple_stream_in_t;
 
-typedef struct select_stream_in
-{
-  tuple_stream_in_t tuple;
-  bool inserted;
-  slotidx_t insert_slot;
-  atindex_t at_insert_loc;
-  atindex_t head;
-} select_stream_in_t;
-
 typedef struct insert_steam
 {
   RID_t rid;
@@ -59,63 +50,6 @@ static void get_new_tuple(input_tuple_t *relR, hls::stream<tuple_stream_in_t> &t
   }
 }
 
-static void find_empty_slot(bucket_t buckets[NUM_BUCKETS],
-                            atindex_t address_table_sizes[NUM_SLOTS],
-                            hls::stream<tuple_stream_in_t> &tuple_stream,
-                            hls::stream<select_stream_in_t> &select_stream,
-                            int numR)
-{
-  for (int i = 0; i < numR; i++)
-  {
-    tuple_stream_in_t tuple = tuple_stream.read();
-    hash_t hash1 = tuple.hash1;
-    hash_t hash2 = tuple.hash2;
-    slotidx_t slot1_idx = buckets[hash1].collision_slot;
-    slotidx_t slot2_idx = buckets[hash2].collision_slot;
-    slotidx_t insert_slot;
-    hash_t insert_bucket;
-    hash_t tag;
-    if (buckets[hash1].slots[slot1_idx].status == 0)
-    {
-      insert_slot = slot1_idx;
-      insert_bucket = hash1;
-      tag = hash2;
-    }
-    else if (buckets[hash2].slots[slot2_idx].status == 0)
-    {
-      insert_slot = slot2_idx;
-      insert_bucket = hash2;
-      tag = hash1;
-    }
-    else
-    {
-      select_stream_in_t select_stream_out;
-      select_stream_out.tuple = tuple;
-      select_stream_out.inserted = false;
-      select_stream.write(select_stream_out);
-      continue;
-    }
-    /** Insert into the selected slot */
-    // TODO see if you need % NUM_SLOTS
-    buckets[insert_bucket].collision_slot = (buckets[insert_bucket].collision_slot + 1);
-
-    atindex_t addr_table_size = address_table_sizes[insert_slot];
-    address_table_sizes[insert_slot] = addr_table_size + 1;
-
-    buckets[insert_bucket].slots[insert_slot].status = 1;
-    buckets[insert_bucket].slots[insert_slot].tag = tag;
-    buckets[insert_bucket].slots[insert_slot].head = addr_table_size;
-
-    select_stream_in_t select_stream_out;
-    select_stream_out.tuple = tuple;
-    select_stream_out.inserted = true;
-    select_stream_out.insert_slot = insert_slot;
-    select_stream_out.at_insert_loc = addr_table_size;
-    select_stream_out.head = addr_table_size;
-    select_stream.write(select_stream_out);
-  }
-}
-
 bool eject_slot(bucket_t buckets[NUM_BUCKETS], hash_t hash, slotidx_t slot_idx)
 {
   hash_t bucket_alt_index = buckets[hash].slots[slot_idx].tag;
@@ -141,87 +75,93 @@ bool eject_slot(bucket_t buckets[NUM_BUCKETS], hash_t hash, slotidx_t slot_idx)
   return false;
 }
 
-static void select_slot(bucket_t buckets[NUM_BUCKETS],
-                        atindex_t address_table_sizes[NUM_SLOTS],
-                        hls::stream<select_stream_in_t> &select_stream,
-                        hls::stream<insert_stream_t> &insert_stream,
-                        int numR)
+static void find_slot(bucket_t buckets[NUM_BUCKETS],
+                      atindex_t address_table_sizes[NUM_SLOTS],
+                      hls::stream<tuple_stream_in_t> &tuple_stream,
+                      hls::stream<insert_stream_t> &insert_stream,
+                      int numR)
 {
   for (int i = 0; i < numR; i++)
   {
-    select_stream_in_t select_in = select_stream.read();
-    if (select_in.inserted)
-    {
-      // already inserted into an empty slot, now insert into address table
-      insert_stream_t insert_stream_out;
-      insert_stream_out.rid = select_in.tuple.rid;
-      insert_stream_out.key = select_in.tuple.key;
-      insert_stream_out.insert_slot = select_in.insert_slot;
-      insert_stream_out.at_insert_loc = select_in.at_insert_loc;
-      insert_stream_out.head = select_in.head;
-      insert_stream.write(insert_stream_out);
-      continue;
-    }
-
-    // Not inserted into an empty slot, try to eject a slot
-
-    tuple_stream_in_t tuple = select_in.tuple;
+    tuple_stream_in_t tuple = tuple_stream.read();
     hash_t hash1 = tuple.hash1;
     hash_t hash2 = tuple.hash2;
-    bool ejected = false;
+    slotidx_t slot1_idx = buckets[hash1].collision_slot;
+    slotidx_t slot2_idx = buckets[hash2].collision_slot;
     slotidx_t insert_slot;
     hash_t insert_bucket;
     hash_t tag;
-    atindex_t at_insert_loc;
     atindex_t head;
-
-    /** Try to eject a slot. */
-    for (int slot_idx_ = 0; slot_idx_ < NUM_SLOTS; slot_idx_++)
+    bool chain = true;
+    if (buckets[hash1].slots[slot1_idx].status == 0)
     {
-      slotidx_t slot_idx = (slotidx_t)(unsigned int)slot_idx_;
-#pragma HLS unroll
-      if (eject_slot(buckets, hash1, slot_idx))
-      {
-        ejected = true;
-        insert_slot = slot_idx;
-        insert_bucket = hash1;
-        tag = hash2;
-      }
-      if (eject_slot(buckets, hash2, slot_idx))
-      {
-        ejected = true;
-        insert_slot = slot_idx;
-        insert_bucket = hash2;
-        tag = hash1;
-      }
+      chain = false;
+      insert_slot = slot1_idx;
+      insert_bucket = hash1;
+      tag = hash2;
     }
-
-    if (ejected)
+    else if (buckets[hash2].slots[slot2_idx].status == 0)
     {
-      // if ejected, then insert into the ejected slot
-      atindex_t addr_table_size = address_table_sizes[insert_slot];
-      address_table_sizes[insert_slot] = addr_table_size + 1;
-
-      buckets[insert_bucket].slots[insert_slot].status = 1;
-      buckets[insert_bucket].slots[insert_slot].tag = tag;
-      buckets[insert_bucket].slots[insert_slot].head = addr_table_size;
-
-      head = addr_table_size;
-      at_insert_loc = addr_table_size;
+      chain = false;
+      insert_slot = slot2_idx;
+      insert_bucket = hash2;
+      tag = hash1;
     }
     else
     {
-      // if not eject, then insert into the chain of collision slot
-      // no need to change the slot's status, tag, or head
-      insert_slot = buckets[hash1].collision_slot;
-      // TODO see if you need % NUM_SLOTS
-      buckets[hash1].collision_slot = (insert_slot + 1);
+      /** No empty slot, try to eject a slot. */
+      for (int slot_idx_ = 0; slot_idx_ < NUM_SLOTS; slot_idx_++)
+      {
+        slotidx_t slot_idx = (slotidx_t)(unsigned int)slot_idx_;
+#pragma HLS unroll
+        if (eject_slot(buckets, hash1, slot_idx))
+        {
+          chain = false;
+          insert_slot = slot_idx;
+          insert_bucket = hash1;
+          tag = hash2;
+          break;
+        }
+        else if (eject_slot(buckets, hash2, slot_idx))
+        {
+          chain = false;
+          insert_slot = slot_idx;
+          insert_bucket = hash2;
+          tag = hash1;
+          break;
+        }
+      }
 
-      atindex_t addr_table_size = address_table_sizes[insert_slot];
-      address_table_sizes[insert_slot] = addr_table_size + 1;
+      if (chain)
+      {
+        // if not eject, then insert into the chain of collision slot
+        // no need to change the slot's status, tag, or head
+        insert_slot = buckets[hash1].collision_slot;
+        insert_bucket = hash1;
+      }
+    }
+    /** Insert into the selected slot */
 
-      head = buckets[hash1].slots[insert_slot].head;
-      at_insert_loc = addr_table_size;
+    /** Always increment the collision slot. If there is an empty slot, then now we will insert
+     * into the next empty slot. If we evicted a slot, then this doesn't really matter.
+     * If we are chaining, then this will chain in the next slot.
+     */
+    buckets[insert_bucket].collision_slot = (buckets[insert_bucket].collision_slot + 1);
+
+    /** Insert at the end of the address table. */
+    atindex_t at_insert_loc = address_table_sizes[insert_slot];
+    address_table_sizes[insert_slot] = at_insert_loc + 1;
+
+    buckets[insert_bucket].slots[insert_slot].status = 1;
+    buckets[insert_bucket].slots[insert_slot].tag = tag;
+    if (chain)
+    {
+      head = buckets[insert_bucket].slots[insert_slot].head;
+    }
+    else
+    {
+      head = at_insert_loc;
+      buckets[insert_bucket].slots[insert_slot].head = head;
     }
 
     insert_stream_t insert_stream_out;
@@ -280,13 +220,11 @@ static void build(bucket_t buckets[NUM_BUCKETS], address_table_t address_tables[
   }
 
   static hls::stream<tuple_stream_in_t> tuple_stream;
-  static hls::stream<select_stream_in_t> select_stream;
   static hls::stream<insert_stream_t> insert_stream;
 
 #pragma HLS DATAFLOW
   get_new_tuple(relR, tuple_stream, numR);
-  find_empty_slot(buckets, address_table_sizes, tuple_stream, select_stream, numR);
-  select_slot(buckets, address_table_sizes, select_stream, insert_stream, numR);
+  find_slot(buckets, address_table_sizes, tuple_stream, insert_stream, numR);
   insert_into_address_table(address_tables, insert_stream, numR);
 }
 
@@ -330,7 +268,7 @@ static void search(bucket_t buckets[NUM_BUCKETS],
     tuple_stream_in_t tuple = tuple_stream.read();
     hash_t hash1 = tuple.hash1;
     hash_t hash2 = tuple.hash2;
-    
+
     for (int slot_idx_ = 0; slot_idx_ < NUM_SLOTS; slot_idx_++)
     {
 #pragma HLS unroll
@@ -340,7 +278,7 @@ static void search(bucket_t buckets[NUM_BUCKETS],
         atindex_t head = buckets[hash1].slots[slot_idx].head;
         search_address_table(address_tables, slot_idx, tuple.rid, tuple.key, head, output_stream, eos);
       }
-    if (hash1 != hash2 && buckets[hash2].slots[slot_idx].status == 1)
+      if (hash1 != hash2 && buckets[hash2].slots[slot_idx].status == 1)
       {
         atindex_t head = buckets[hash2].slots[slot_idx].head;
         search_address_table(address_tables, slot_idx, tuple.rid, tuple.key, head, output_stream, eos);
