@@ -1,5 +1,5 @@
 #include "kml_join.hpp"
-
+#include <iostream>
 
 typedef struct tuple_stream_in
 {
@@ -176,8 +176,9 @@ static void select_slot(bucket_t buckets[NUM_BUCKETS],
     atindex_t head;
 
     /** Try to eject a slot. */
-    for (slotidx_t slot_idx = 0; slot_idx < NUM_SLOTS; slot_idx++)
+    for (int slot_idx_ = 0; slot_idx_ < NUM_SLOTS; slot_idx_++)
     {
+      slotidx_t slot_idx = (slotidx_t)(unsigned int)slot_idx_;
 #pragma HLS unroll
       if (eject_slot(buckets, hash1, slot_idx))
       {
@@ -214,7 +215,7 @@ static void select_slot(bucket_t buckets[NUM_BUCKETS],
       // no need to change the slot's status, tag, or head
       insert_slot = buckets[hash1].collision_slot;
       // TODO see if you need % NUM_SLOTS
-      buckets[hash1].collision_slot = (insert_slot + 1) % NUM_SLOTS;
+      buckets[hash1].collision_slot = (insert_slot + 1);
 
       atindex_t addr_table_size = address_table_sizes[insert_slot];
       address_table_sizes[insert_slot] = addr_table_size + 1;
@@ -240,7 +241,19 @@ static void insert_into_address_table(address_table_t address_tables[NUM_SLOTS],
   for (int i = 0; i < numR; i++)
   {
     insert_stream_t insert_stream_in = insert_stream.read();
-    // address_table_entry_t entries[NUM_ADDRESS_TABLES_SLOT] = address_tables[insert_stream_in.insert_slot].entries;
+
+    // insert new tuple
+    address_tables[insert_stream_in.insert_slot].entries[insert_stream_in.at_insert_loc].rid = insert_stream_in.rid;
+    address_tables[insert_stream_in.insert_slot].entries[insert_stream_in.at_insert_loc].key = insert_stream_in.key;
+    address_tables[insert_stream_in.insert_slot].entries[insert_stream_in.at_insert_loc].next = 0;
+
+    if (insert_stream_in.head == insert_stream_in.at_insert_loc)
+    {
+      // start empty chain
+      continue;
+    }
+
+    // Insert into chain
     atindex_t curr = insert_stream_in.head;
     while (address_tables[insert_stream_in.insert_slot].entries[curr].next != 0)
     {
@@ -248,11 +261,6 @@ static void insert_into_address_table(address_table_t address_tables[NUM_SLOTS],
     }
 
     address_tables[insert_stream_in.insert_slot].entries[curr].next = insert_stream_in.at_insert_loc;
-
-    // insert new tuple
-    address_tables[insert_stream_in.insert_slot].entries[insert_stream_in.at_insert_loc].rid = insert_stream_in.rid;
-    address_tables[insert_stream_in.insert_slot].entries[insert_stream_in.at_insert_loc].key = insert_stream_in.key;
-    address_tables[insert_stream_in.insert_slot].entries[insert_stream_in.at_insert_loc].next = 0;
 
     /**
      * Observe that if head == at_insert_loc, then we create 1 length chain.
@@ -264,6 +272,12 @@ static void build(bucket_t buckets[NUM_BUCKETS], address_table_t address_tables[
 {
   atindex_t address_table_sizes[NUM_SLOTS];
 #pragma HLS ARRAY_RESHAPE variable = address_tables type = complete dim = 1
+
+  for (int i = 0; i < NUM_SLOTS; i++)
+  {
+#pragma HLS unroll
+    address_table_sizes[i] = 0;
+  }
 
   static hls::stream<tuple_stream_in_t> tuple_stream;
   static hls::stream<select_stream_in_t> select_stream;
@@ -286,6 +300,7 @@ static void search_address_table(address_table_t address_tables[NUM_SLOTS],
 {
   // address_table_entry_t entries[NUM_ADDRESS_TABLES_SLOT] = address_tables[slot_idx].entries;
   atindex_t curr = head;
+  int i = 0;
   do
   {
     if (address_tables[slot_idx].entries[curr].key == key)
@@ -299,6 +314,7 @@ static void search_address_table(address_table_t address_tables[NUM_SLOTS],
       return;
     }
     curr = address_tables[slot_idx].entries[curr].next;
+    i++;
   } while (curr != 0);
 }
 
@@ -314,9 +330,11 @@ static void search(bucket_t buckets[NUM_BUCKETS],
     tuple_stream_in_t tuple = tuple_stream.read();
     hash_t hash1 = tuple.hash1;
     hash_t hash2 = tuple.hash2;
-    for (slotidx_t slot_idx = 0; slot_idx < NUM_SLOTS; slot_idx++)
+    
+    for (int slot_idx_ = 0; slot_idx_ < NUM_SLOTS; slot_idx_++)
     {
 #pragma HLS unroll
+      slotidx_t slot_idx = (slotidx_t)(unsigned int)slot_idx_;
       if (buckets[hash1].slots[slot_idx].status == 1)
       {
         atindex_t head = buckets[hash1].slots[slot_idx].head;
@@ -337,7 +355,7 @@ static void write_output(hls::stream<output_tuple_t> &output_stream,
                          output_tuple_t *relRS)
 {
   int i = 0;
-  while(1)
+  while (1)
   {
     bool end = eos.read();
     if (end)
@@ -365,10 +383,10 @@ static void probe(bucket_t buckets[NUM_BUCKETS], address_table_t address_tables[
 extern "C"
 {
   void kml_join(input_tuple_t *relR,
-                 input_tuple_t *relS,
-                 output_tuple_t *relRS,
-                 int numR,
-                 int numS)
+                input_tuple_t *relS,
+                output_tuple_t *relRS,
+                int numR,
+                int numS)
   {
     bucket_t buckets[NUM_BUCKETS];
     address_table_t address_tables[NUM_SLOTS];
@@ -379,6 +397,7 @@ extern "C"
       buckets[i].collision_slot = i & (NUM_SLOTS - 1);
       for (int j = 0; j < NUM_SLOTS; j++)
       {
+#pragma HLS unroll
         buckets[i].slots[j].status = 0;
       }
     }

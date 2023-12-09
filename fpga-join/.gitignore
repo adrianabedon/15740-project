@@ -5,3 +5,6 @@ xrt.ini
 emconfig.json
 fpga_join_exec
 profile_summary.csv
+v++*
+xcd.log
+xrc.log
