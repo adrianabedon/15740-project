@@ -2,3 +2,6 @@ build_dir*/*
 .run/*
 _*/*
 xrt.ini
+emconfig.json
+fpga_join_exec
+profile_summary.csv
