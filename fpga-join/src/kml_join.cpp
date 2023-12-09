@@ -283,7 +283,6 @@ static void search(bucket_t buckets[NUM_BUCKETS],
 
     for (int slot_idx_ = 0; slot_idx_ < NUM_SLOTS; slot_idx_++)
     {
-#pragma HLS unroll
       slotidx_t slot_idx = (slotidx_t)(unsigned int)slot_idx_;
       if (buckets[hash1].slots[slot_idx].status == 1)
       {
