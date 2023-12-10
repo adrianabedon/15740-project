@@ -121,7 +121,7 @@ static void find_slot(bucket_t buckets[NUM_BUCKETS],
       insert_bucket = hash1;
       tag = hash2;
     }
-    else if (buckets[hash2].slots[slot2_idx].status == 0)
+    else if (hash1 != hash2 && buckets[hash2].slots[slot2_idx].status == 0)
     {
       chain = false;
       insert_slot = slot2_idx;
@@ -143,7 +143,7 @@ static void find_slot(bucket_t buckets[NUM_BUCKETS],
           tag = hash2;
           break;
         }
-        else if (eject_slot(buckets, hash2, slot_idx))
+        else if (hash1 != hash2 && eject_slot(buckets, hash2, slot_idx))
         {
           chain = false;
           insert_slot = slot_idx;
@@ -162,6 +162,7 @@ static void find_slot(bucket_t buckets[NUM_BUCKETS],
       }
     }
     /** Insert into the selected slot */
+    buckets[insert_bucket].slots[insert_slot].status = 1;
 
     /** Always increment the collision slot. If there is an empty slot, then now we will insert
      * into the next empty slot. If we evicted a slot, then this doesn't really matter.
@@ -173,7 +174,6 @@ static void find_slot(bucket_t buckets[NUM_BUCKETS],
     atindex_t at_insert_loc = address_table_sizes[insert_slot];
     address_table_sizes[insert_slot] = at_insert_loc + 1;
 
-    buckets[insert_bucket].slots[insert_slot].status = 1;
     if (chain)
     {
       head = buckets[insert_bucket].slots[insert_slot].head;
@@ -201,6 +201,7 @@ static void insert_into_address_table(address_table_t address_tables[NUM_SLOTS],
 {
   for (int i = 0; i < numR; i++)
   {
+    #pragma HLS PIPELINE II=1
     insert_stream_t insert_stream_in = insert_stream.read();
 
     // insert new tuple
@@ -250,7 +251,6 @@ static void search_address_table(address_table_t address_tables[NUM_SLOTS],
 {
   // address_table_entry_t entries[NUM_ADDRESS_TABLES_SLOT] = address_tables[slot_idx].entries;
   atindex_t curr = head;
-  int i = 0;
   do
   {
     if (address_tables[slot_idx].entries[curr].key == key)
@@ -264,7 +264,6 @@ static void search_address_table(address_table_t address_tables[NUM_SLOTS],
       return;
     }
     curr = address_tables[slot_idx].entries[curr].next;
-    i++;
   } while (curr != 0);
 }
 
@@ -277,12 +276,14 @@ static void search(bucket_t buckets[NUM_BUCKETS],
 {
   for (int i = 0; i < numS; i++)
   {
+    #pragma HLS PIPELINE II=1
     tuple_stream_in_t tuple = tuple_stream.read();
     hash_t hash1 = tuple.hash1;
     hash_t hash2 = tuple.hash2;
 
     for (int slot_idx_ = 0; slot_idx_ < NUM_SLOTS; slot_idx_++)
     {
+
       slotidx_t slot_idx = (slotidx_t)(unsigned int)slot_idx_;
       if (buckets[hash1].slots[slot_idx].status == 1)
       {
@@ -331,17 +332,17 @@ static void probe(bucket_t buckets[NUM_BUCKETS], address_table_t address_tables[
 
 extern "C"
 {
-  void kml_join(input_tuple_t *relR,
-                input_tuple_t *relS,
-                output_tuple_t *relRS,
-                int numR,
-                int numS)
-  {
-    bucket_t buckets[NUM_BUCKETS];
-    address_table_t address_tables[NUM_SLOTS];
+void kml_join(input_tuple_t *relR,
+            input_tuple_t *relS,
+            output_tuple_t *relRS,
+            int numR,
+            int numS)
+{
+bucket_t buckets[NUM_BUCKETS];
+address_table_t address_tables[NUM_SLOTS];
 #pragma HLS ARRAY_RESHAPE variable = address_tables type = complete dim = 1
 
-    build(buckets, address_tables, relR, numR);
-    probe(buckets, address_tables, relS, relRS, numS);
-  }
+build(buckets, address_tables, relR, numR);
+probe(buckets, address_tables, relS, relRS, numS);
+}
 }
