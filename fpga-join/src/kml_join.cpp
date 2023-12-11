@@ -235,7 +235,11 @@ static void build(bucket_t buckets[NUM_BUCKETS], address_table_t address_tables[
   static hls::stream<tuple_stream_in_t> tuple_stream;
   static hls::stream<insert_stream_t> insert_stream;
 
+/** Need to make tuple_stream a PIPO to prevent deadlocks */
 #pragma HLS stream type=pipo variable = tuple_stream
+/** As long at the chains don't get absurdley long, then we don't need
+  * make this a PIPO since inserts will be faster than searches. This is
+  * just my theory at the moment though. */
 #pragma HLS stream type=fifo variable = insert_stream
 
 #pragma HLS DATAFLOW
@@ -252,7 +256,6 @@ static void search_address_table(address_table_t address_tables[NUM_SLOTS],
                                  hls::stream<output_tuple_t> &output_stream,
                                  hls::stream<bool> &eos)
 {
-  // address_table_entry_t entries[NUM_ADDRESS_TABLES_SLOT] = address_tables[slot_idx].entries;
   atindex_t curr = head;
   do
   {
@@ -327,6 +330,7 @@ static void probe(bucket_t buckets[NUM_BUCKETS], address_table_t address_tables[
   static hls::stream<output_tuple_t> output_stream;
   hls::stream<bool> eos;
 
+/** Need to make tuple_stream a PIPO to prevent deadlocks */
 #pragma HLS stream type=pipo variable = tuple_stream
 #pragma HLS stream type=fifo variable = output_stream
 #pragma HLS stream type=fifo variable = eos
