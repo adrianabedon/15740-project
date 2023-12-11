@@ -235,9 +235,8 @@ static void build(bucket_t buckets[NUM_BUCKETS], address_table_t address_tables[
   static hls::stream<tuple_stream_in_t> tuple_stream;
   static hls::stream<insert_stream_t> insert_stream;
 
-/** I don't think that we need this. */
-// #pragma HLS stream variable = tuple_stream depth = 16
-// #pragma HLS stream variable = insert_stream depth = 16
+#pragma HLS stream type=pipo variable = tuple_stream
+#pragma HLS stream type=fifo variable = insert_stream
 
 #pragma HLS DATAFLOW
   get_new_tuple(relR, tuple_stream, numR);
@@ -328,10 +327,9 @@ static void probe(bucket_t buckets[NUM_BUCKETS], address_table_t address_tables[
   static hls::stream<output_tuple_t> output_stream;
   hls::stream<bool> eos;
 
-/** I don't think that we need this. */
-// #pragma HLS stream variable = tuple_stream depth = NUM_TUPLES
-// #pragma HLS stream variable = output_stream depth = NUM_TUPLES
-// #pragma HLS stream variable = eos depth = NUM_TUPLES
+#pragma HLS stream type=pipo variable = tuple_stream
+#pragma HLS stream type=fifo variable = output_stream
+#pragma HLS stream type=fifo variable = eos
 
 #pragma HLS DATAFLOW
   get_new_tuple(relS, tuple_stream, numS);
