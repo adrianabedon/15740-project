@@ -2,7 +2,7 @@
 #include "kml_join.hpp"
 
 #define NUM_TRANS 1
-#define DATA_SIZE 16
+#define DATA_SIZE NUM_TUPLES
 
 int main()
 {
@@ -29,10 +29,12 @@ int main()
 
     for (i = 0; i < DATA_SIZE; i++)
     {
-        printf("Rid(1)%d Rid(2)%d Key %d\n", c[i].rid1, c[i].rid2, c[i].key);
-        // if (c[i].key!=i){
-        //     retval=1;
-        // }
+        // printf("%d: Rid(1)%d Rid(2)%d Key %d\n", i, c[i].rid1, c[i].rid2, c[i].key);
+        bool match = (c[i].key == i) && (c[i].rid1 == i) && (c[i].rid2 == (i+DATA_SIZE));
+        if (!match) {
+            retval = 1;
+            break;
+        }
     }
 
     // Print Results
@@ -44,9 +46,9 @@ int main()
     }
     else
     {
-        printf(" *** *** *** *** \n");
+        printf(" xxx xxx xxx xxx \n");
         printf(" Mismatch");
-        printf(" *** *** *** *** \n");
+        printf(" xxx xxx xxx xxx \n");
     }
 
     // Return 0 if outputs are correct

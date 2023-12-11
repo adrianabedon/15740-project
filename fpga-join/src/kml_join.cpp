@@ -201,7 +201,7 @@ static void insert_into_address_table(address_table_t address_tables[NUM_SLOTS],
 {
   for (int i = 0; i < numR; i++)
   {
-    #pragma HLS PIPELINE II=1
+#pragma HLS PIPELINE II = 1
     insert_stream_t insert_stream_in = insert_stream.read();
 
     // insert new tuple
@@ -234,6 +234,10 @@ static void build(bucket_t buckets[NUM_BUCKETS], address_table_t address_tables[
 {
   static hls::stream<tuple_stream_in_t> tuple_stream;
   static hls::stream<insert_stream_t> insert_stream;
+
+/** I don't think that we need this. */
+// #pragma HLS stream variable = tuple_stream depth = 16
+// #pragma HLS stream variable = insert_stream depth = 16
 
 #pragma HLS DATAFLOW
   get_new_tuple(relR, tuple_stream, numR);
@@ -276,7 +280,7 @@ static void search(bucket_t buckets[NUM_BUCKETS],
 {
   for (int i = 0; i < numS; i++)
   {
-    #pragma HLS PIPELINE II=1
+#pragma HLS PIPELINE II = 1
     tuple_stream_in_t tuple = tuple_stream.read();
     hash_t hash1 = tuple.hash1;
     hash_t hash2 = tuple.hash2;
@@ -324,6 +328,11 @@ static void probe(bucket_t buckets[NUM_BUCKETS], address_table_t address_tables[
   static hls::stream<output_tuple_t> output_stream;
   hls::stream<bool> eos;
 
+/** I don't think that we need this. */
+// #pragma HLS stream variable = tuple_stream depth = NUM_TUPLES
+// #pragma HLS stream variable = output_stream depth = NUM_TUPLES
+// #pragma HLS stream variable = eos depth = NUM_TUPLES
+
 #pragma HLS DATAFLOW
   get_new_tuple(relS, tuple_stream, numS);
   search(buckets, address_tables, tuple_stream, output_stream, eos, numS);
@@ -332,17 +341,28 @@ static void probe(bucket_t buckets[NUM_BUCKETS], address_table_t address_tables[
 
 extern "C"
 {
-void kml_join(input_tuple_t *relR,
-            input_tuple_t *relS,
-            output_tuple_t *relRS,
-            int numR,
-            int numS)
-{
-bucket_t buckets[NUM_BUCKETS];
-address_table_t address_tables[NUM_SLOTS];
+  void kml_join(input_tuple_t *relR,
+                input_tuple_t *relS,
+                output_tuple_t *relRS,
+                int numR,
+                int numS)
+  {
+/** You HAVE to set the depth to the size of the input for cosimulation. Otherwise if will
+  * fail and the error sucks at explaining what happened. */
+#pragma HLS INTERFACE m_axi port = relR depth = NUM_TUPLES bundle = gmem0
+#pragma HLS INTERFACE m_axi port = relS depth = NUM_TUPLES bundle = gmem1
+#pragma HLS INTERFACE m_axi port = relRS depth = NUM_TUPLES bundle = gmem2 
+#pragma HLS INTERFACE s_axilite port = relR bundle = control
+#pragma HLS INTERFACE s_axilite port = relS bundle = control
+#pragma HLS INTERFACE s_axilite port = relRS bundle = control
+#pragma HLS INTERFACE s_axilite port = numR bundle = control
+#pragma HLS INTERFACE s_axilite port = numS bundle = control
+#pragma HLS INTERFACE s_axilite port = return bundle = control
+    bucket_t buckets[NUM_BUCKETS];
+    address_table_t address_tables[NUM_SLOTS];
 #pragma HLS ARRAY_RESHAPE variable = address_tables type = complete dim = 1
 
-build(buckets, address_tables, relR, numR);
-probe(buckets, address_tables, relS, relRS, numS);
-}
+    build(buckets, address_tables, relR, numR);
+    probe(buckets, address_tables, relS, relRS, numS);
+  }
 }
