@@ -11,3 +11,4 @@ xrc.log
 xclbin.run_summary
 xilinx_aws-*
 emulation_debug.log
+.ipcache
