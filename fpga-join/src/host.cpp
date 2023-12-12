@@ -90,12 +90,13 @@ int main(int argc, char *argv[])
   cl::Buffer buffer_input1(context, CL_MEM_READ_ONLY, input_size_in_bytes);
   cl::Buffer buffer_input2(context, CL_MEM_READ_ONLY, input_size_in_bytes);
   cl::Buffer buffer_result(context, CL_MEM_WRITE_ONLY, output_size_in_bytes);
+  cl::Buffer buffer_result_size(context, CL_MEM_WRITE_ONLY, sizeof(int));
 
   // We then need to map our OpenCL buffers to get the pointers
   input_tuple_t *ptr_input1 = (input_tuple_t *)q.enqueueMapBuffer(buffer_input1, CL_TRUE, CL_MAP_WRITE, 0, input_size_in_bytes);
   input_tuple_t *ptr_input2 = (input_tuple_t *)q.enqueueMapBuffer(buffer_input2, CL_TRUE, CL_MAP_WRITE, 0, input_size_in_bytes);
   output_tuple_t *ptr_result = (output_tuple_t *)q.enqueueMapBuffer(buffer_result, CL_TRUE, CL_MAP_READ, 0, output_size_in_bytes);
-  int *result_size = (int *)q.enqueueMapBuffer(buffer_result, CL_TRUE, CL_MAP_READ, 0, sizeof(int));
+  int *result_size = (int *)q.enqueueMapBuffer(buffer_result_size, CL_TRUE, CL_MAP_READ, 0, sizeof(int));
 
   // setting input data
   for (int i = 0; i < NUM_INPUT_TUPLES; i++)
@@ -111,7 +112,6 @@ int main(int argc, char *argv[])
 
   q.finish();
 
-  
   cl::Event event;
   uint64_t nstimestart, nstimeend;
 
@@ -119,10 +119,9 @@ int main(int argc, char *argv[])
   kml_join.setArg(narg++, buffer_input1);
   kml_join.setArg(narg++, buffer_input2);
   kml_join.setArg(narg++, buffer_result);
-  kml_join.setArg(narg++, result_size);
+  kml_join.setArg(narg++, buffer_result_size);
   kml_join.setArg(narg++, NUM_INPUT_TUPLES);
   kml_join.setArg(narg++, NUM_INPUT_TUPLES);
-
 
   // Launch the Kernel
   q.enqueueTask(kml_join, NULL, &event);
@@ -136,23 +135,21 @@ int main(int argc, char *argv[])
   auto tuples_per_sec = (NUM_INPUT_TUPLES) / (matmul_time / 1000000000.0);
 
   std::cout << "tuples per sec: " << tuples_per_sec << std::endl;
-
   // The result of the previous kernel execution will need to be retrieved in
   // order to view the results. This call will transfer the data from FPGA to
   // source_results vector
   q.enqueueMigrateMemObjects({buffer_result}, CL_MIGRATE_MEM_OBJECT_HOST);
+  q.enqueueMigrateMemObjects({buffer_result_size}, CL_MIGRATE_MEM_OBJECT_HOST);
   q.finish();
 
-  
+  std::cout << "result size: " << *result_size << std::endl;
+
   int retval = check_result(ptr_input1, ptr_input2, ptr_result, NUM_INPUT_TUPLES, NUM_INPUT_TUPLES, *result_size);
   if (retval)
   {
     std::cout << "xxxxxxxxx\nTEST FAILED\nxxxxxxxxx" << std::endl;
     return EXIT_FAILURE;
   }
-
-
-
 
   q.enqueueUnmapMemObject(buffer_input1, ptr_input1);
   q.enqueueUnmapMemObject(buffer_input2, ptr_input2);
