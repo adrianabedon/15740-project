@@ -242,7 +242,7 @@ static void build(bucket_t buckets[NUM_BUCKETS], address_table_t address_tables[
 /** As long at the chains don't get absurdley long, then we don't need
  * make this a PIPO since inserts will be faster than searches. This is
  * just my theory at the moment though. */
-#pragma HLS stream type = fifo variable = insert_stream
+#pragma HLS stream type = pipo variable = insert_stream
 
 #pragma HLS DATAFLOW
   get_new_tuple(relR, tuple_stream, numR);
@@ -289,9 +289,11 @@ static void search(bucket_t buckets[NUM_BUCKETS],
     hash_t hash1 = tuple.hash1;
     hash_t hash2 = tuple.hash2;
 
+
     for (int slot_idx_ = 0; slot_idx_ < NUM_SLOTS; slot_idx_++)
     {
-
+#pragma HLS dependence variable = buckets type = intra false // apparently these are removed since the loop is unrolled automatically?
+#pragma HLS dependence variable = address_tables->entries type = intra false
       slotidx_t slot_idx = (slotidx_t)(unsigned int)slot_idx_;
       if (buckets[hash1].slots[slot_idx].status == 1)
       {
@@ -334,8 +336,8 @@ static void probe(bucket_t buckets[NUM_BUCKETS], address_table_t address_tables[
 
 /** Need to make tuple_stream a PIPO to prevent deadlocks */
 #pragma HLS stream type = pipo variable = tuple_stream
-#pragma HLS stream type = fifo variable = output_stream
-#pragma HLS stream type = fifo variable = eos
+#pragma HLS stream type = pipo variable = output_stream
+#pragma HLS stream type = pipo variable = eos
 
 #pragma HLS DATAFLOW
   get_new_tuple(relS, tuple_stream, numS);
@@ -364,7 +366,7 @@ extern "C"
 #pragma HLS INTERFACE s_axilite port = return bundle = control
     bucket_t buckets[NUM_BUCKETS];
     address_table_t address_tables[NUM_SLOTS];
-#pragma HLS ARRAY_RESHAPE variable = address_tables type = complete dim = 1
+#pragma HLS array_partition variable = address_tables type = complete dim = 1
 
     build(buckets, address_tables, relR, numR);
     probe(buckets, address_tables, relS, relRS, numS);
