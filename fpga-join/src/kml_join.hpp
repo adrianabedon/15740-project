@@ -9,7 +9,7 @@
 #define NUM_SLOTS 4
 #define NUM_BUCKETS (2 << HASH_BITS) // 2^12 = 4096
 #define NUM_ADDRESS_TABLES_SLOT \
-  5000 // this is the number of slots in each address table
+  10000 // this is the number of slots in each address table
        // max size of inner relation in NUM_SLOT * NUM_ADDRESS_TABLES_SLOT
 #define NUM_TUPLES 3000
 
