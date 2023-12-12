@@ -53,6 +53,7 @@ static void get_new_tuple(input_tuple_t *relR, hls::stream<tuple_stream_in_t> &t
 
 bool eject_slot(bucket_t buckets[NUM_BUCKETS], hash_t hash, slotidx_t slot_idx)
 {
+#pragma HLS INLINE
   hash_t bucket_alt_index = buckets[hash].slots[slot_idx].tag;
 
   // slot is free
@@ -203,11 +204,11 @@ static void find_slot(bucket_t buckets[NUM_BUCKETS],
   }
 }
 
-static void insert_into_address_table(address_table_t address_tables[NUM_SLOTS], slotidx_t slot,
-                                      hls::stream<insert_stream_t> &insert_stream,
+static void insert_into_address_table(address_table_t *address_table
+                                          hls::stream<insert_stream_t> &insert_stream,
                                       hls::stream<bool> &eos)
 {
-#pragma HLS FUNCTION_INSTANTIATE variable = slot
+#pragma HLS FUNCTION_INSTANTIATE variable = address_table
   while (1)
   {
 #pragma HLS PIPELINE II = 1
@@ -220,9 +221,9 @@ static void insert_into_address_table(address_table_t address_tables[NUM_SLOTS],
     insert_stream_t insert_stream_in = insert_stream.read();
 
     // insert new tuple
-    address_tables[slot].entries[insert_stream_in.at_insert_loc].rid = insert_stream_in.rid;
-    address_tables[slot].entries[insert_stream_in.at_insert_loc].key = insert_stream_in.key;
-    address_tables[slot].entries[insert_stream_in.at_insert_loc].next = 0;
+    address_table->entries[insert_stream_in.at_insert_loc].rid = insert_stream_in.rid;
+    address_table->entries[insert_stream_in.at_insert_loc].key = insert_stream_in.key;
+    address_table->entries[insert_stream_in.at_insert_loc].next = 0;
 
     if (insert_stream_in.head == insert_stream_in.at_insert_loc)
     {
@@ -232,12 +233,12 @@ static void insert_into_address_table(address_table_t address_tables[NUM_SLOTS],
 
     // Insert into chain
     atindex_t curr = insert_stream_in.head;
-    while (address_tables[slot].entries[curr].next != 0)
+    while (address_table->entries[curr].next != 0)
     {
-      curr = address_tables[slot].entries[curr].next;
+      curr = address_table->entries[curr].next;
     }
 
-    address_tables[slot].entries[curr].next = insert_stream_in.at_insert_loc;
+    address_table->entries[curr].next = insert_stream_in.at_insert_loc;
 
     /**
      * Observe that if head == at_insert_loc, then we create 1 length chain.
@@ -245,7 +246,10 @@ static void insert_into_address_table(address_table_t address_tables[NUM_SLOTS],
   }
 }
 
-static void build(bucket_t buckets[NUM_BUCKETS], address_table_t address_tables[NUM_SLOTS], input_tuple_t *relR, int numR)
+static void build(bucket_t buckets[NUM_BUCKETS],
+                  address_table_t *address_table1, address_table_t *address_table2,
+                  address_table_t *address_table3, address_table_t *address_table4,
+                  input_tuple_t *relR, int numR)
 {
   static hls::stream<tuple_stream_in_t> tuple_stream;
   static hls::stream<insert_stream_t> insert_streams[NUM_SLOTS];
@@ -261,39 +265,40 @@ static void build(bucket_t buckets[NUM_BUCKETS], address_table_t address_tables[
 #pragma HLS DATAFLOW
   get_new_tuple(relR, tuple_stream, numR);
   find_slot(buckets, tuple_stream, insert_streams, eos, numR);
-  insert_into_address_table(address_tables, 0, insert_streams[0], eos[0]);
-  insert_into_address_table(address_tables, 1, insert_streams[1], eos[1]);
-  insert_into_address_table(address_tables, 2, insert_streams[2], eos[2]);
-  insert_into_address_table(address_tables, 3, insert_streams[3], eos[3]);
+  insert_into_address_table(address_table1, insert_streams[0], eos[0]);
+  insert_into_address_table(address_table2, insert_streams[1], eos[1]);
+  insert_into_address_table(address_table3, insert_streams[2], eos[2]);
+  insert_into_address_table(address_table4, insert_streams[3], eos[3]);
 }
 
-static void search_address_table(address_table_t address_tables[NUM_SLOTS],
-                                 slotidx_t slot_idx,
+static void search_address_table(address_table_t *address_table,
                                  RID_t rid,
                                  Key_t key,
                                  atindex_t head,
                                  hls::stream<output_tuple_t> &output_stream,
                                  hls::stream<bool> &eos)
 {
+#pragma HLS FUNCTION_INSTANTIATE variable = address_table
   atindex_t curr = head;
   do
   {
-    if (address_tables[slot_idx].entries[curr].key == key)
+    if (address_table->entries[curr].key == key)
     {
       output_tuple_t output_tuple;
-      output_tuple.rid1 = address_tables[slot_idx].entries[curr].rid;
+      output_tuple.rid1 = address_table->entries[curr].rid;
       output_tuple.rid2 = rid;
       output_tuple.key = key;
       output_stream.write(output_tuple);
       eos.write(false);
       return;
     }
-    curr = address_tables[slot_idx].entries[curr].next;
+    curr = address_table->entries[curr].next;
   } while (curr != 0);
 }
 
 static void search(bucket_t buckets[NUM_BUCKETS],
-                   address_table_t address_tables[NUM_SLOTS],
+                   address_table_t *address_table1, address_table_t *address_table2,
+                   address_table_t *address_table3, address_table_t *address_table4,
                    hls::stream<tuple_stream_in_t> &tuple_stream,
                    hls::stream<output_tuple_t> &output_stream,
                    hls::stream<bool> &eos,
@@ -306,21 +311,55 @@ static void search(bucket_t buckets[NUM_BUCKETS],
     hash_t hash1 = tuple.hash1;
     hash_t hash2 = tuple.hash2;
 
-    for (int slot_idx_ = 0; slot_idx_ < NUM_SLOTS; slot_idx_++)
+#pragma HLS DEPENDENCE variable = buckets->slots->status intra false
+#pragma HLS DEPENDENCE variable = buckets->slots->head intra false
+
+    // Search address table 1
+    if (buckets[hash1].slots[0].status == 1)
     {
-#pragma HLS dependence variable = buckets type = intra false // apparently these are removed since the loop is unrolled automatically?
-#pragma HLS dependence variable = address_tables->entries type = intra false
-      slotidx_t slot_idx = (slotidx_t)(unsigned int)slot_idx_;
-      if (buckets[hash1].slots[slot_idx].status == 1)
-      {
-        atindex_t head = buckets[hash1].slots[slot_idx].head;
-        search_address_table(address_tables, slot_idx, tuple.rid, tuple.key, head, output_stream, eos);
-      }
-      if (hash1 != hash2 && buckets[hash2].slots[slot_idx].status == 1)
-      {
-        atindex_t head = buckets[hash2].slots[slot_idx].head;
-        search_address_table(address_tables, slot_idx, tuple.rid, tuple.key, head, output_stream, eos);
-      }
+      atindex_t head = buckets[hash1].slots[0].head;
+      search_address_table(address_table1, tuple.rid, tuple.key, head, output_stream, eos);
+    }
+    if (hash1 != hash2 && buckets[hash2].slots[0].status == 1)
+    {
+      atindex_t head = buckets[hash2].slots[0].head;
+      search_address_table(address_table1, tuple.rid, tuple.key, head, output_stream, eos);
+    }
+
+    // Search address table 2
+    if (buckets[hash1].slots[1].status == 1)
+    {
+      atindex_t head = buckets[hash1].slots[1].head;
+      search_address_table(address_table2, tuple.rid, tuple.key, head, output_stream, eos);
+    }
+    if (hash1 != hash2 && buckets[hash2].slots[1].status == 1)
+    {
+      atindex_t head = buckets[hash2].slots[1].head;
+      search_address_table(address_table2, tuple.rid, tuple.key, head, output_stream, eos);
+    }
+
+    // Search address table 3
+    if (buckets[hash1].slots[2].status == 1)
+    {
+      atindex_t head = buckets[hash1].slots[2].head;
+      search_address_table(address_table3, tuple.rid, tuple.key, head, output_stream, eos);
+    }
+    if (hash1 != hash2 && buckets[hash2].slots[2].status == 1)
+    {
+      atindex_t head = buckets[hash2].slots[2].head;
+      search_address_table(address_table3, tuple.rid, tuple.key, head, output_stream, eos);
+    }
+
+    // Search address table 4
+    if (buckets[hash1].slots[3].status == 1)
+    {
+      atindex_t head = buckets[hash1].slots[3].head;
+      search_address_table(address_table4, tuple.rid, tuple.key, head, output_stream, eos);
+    }
+    if (hash1 != hash2 && buckets[hash2].slots[3].status == 1)
+    {
+      atindex_t head = buckets[hash2].slots[3].head;
+      search_address_table(address_table4, tuple.rid, tuple.key, head, output_stream, eos);
     }
   }
   eos.write(true);
@@ -391,10 +430,26 @@ extern "C"
 #pragma HLS INTERFACE s_axilite port = numS bundle = control
 #pragma HLS INTERFACE s_axilite port = return bundle = control
     bucket_t buckets[NUM_BUCKETS];
-    address_table_t address_tables[NUM_SLOTS];
-#pragma HLS array_partition variable = address_tables type = complete dim = 1
+    address_table_t address_table1;
+    address_table_t address_table2;
+    address_table_t address_table3;
+    address_table_t address_table4;
 
-    build(buckets, address_tables, relR, numR);
-    probe(buckets, address_tables, relS, relRS, numResult, numS);
+    build(buckets,
+          &address_table1,
+          &address_table2,
+          &address_table3,
+          &address_table4,
+          relR,
+          numR);
+    probe(buckets,
+          &address_table1,
+          &address_table2,
+          &address_table3,
+          &address_table4,
+          relS,
+          relRS,
+          numResult,
+          numS);
   }
 }
