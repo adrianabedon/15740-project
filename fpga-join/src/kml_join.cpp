@@ -79,7 +79,8 @@ bool eject_slot(bucket_t buckets[NUM_BUCKETS], hash_t hash, slotidx_t slot_idx)
 
 static void find_slot(bucket_t buckets[NUM_BUCKETS],
                       hls::stream<tuple_stream_in_t> &tuple_stream,
-                      hls::stream<insert_stream_t> &insert_stream,
+                      hls::stream<insert_stream_t> insert_streams[NUM_SLOTS],
+                      hls::stream<bool> eos[NUM_SLOTS],
                       int numR)
 {
   atindex_t address_table_sizes[NUM_SLOTS];
@@ -163,14 +164,14 @@ static void find_slot(bucket_t buckets[NUM_BUCKETS],
         insert_bucket = hash1;
       }
     }
-    /** Insert into the selected slot */
-    buckets[insert_bucket].slots[insert_slot].status = 1;
-
     /** Always increment the collision slot. If there is an empty slot, then now we will insert
      * into the next empty slot. If we evicted a slot, then this doesn't really matter.
      * If we are chaining, then this will chain in the next slot.
      */
     buckets[insert_bucket].collision_slot = (buckets[insert_bucket].collision_slot + 1);
+
+    /** Insert into the selected slot */
+    buckets[insert_bucket].slots[insert_slot].status = 1;
 
     /** Insert at the end of the address table. */
     atindex_t at_insert_loc = address_table_sizes[insert_slot];
@@ -193,23 +194,37 @@ static void find_slot(bucket_t buckets[NUM_BUCKETS],
     insert_stream_out.insert_slot = insert_slot;
     insert_stream_out.at_insert_loc = at_insert_loc;
     insert_stream_out.head = head;
-    insert_stream.write(insert_stream_out);
+    eos[insert_slot].write(false);
+    insert_streams[insert_slot].write(insert_stream_out);
+  }
+
+  for (int i = 0; i < NUM_SLOTS; i++)
+  {
+#pragma HLS unroll
+    eos[i].write(true);
   }
 }
 
-static void insert_into_address_table(address_table_t address_tables[NUM_SLOTS],
+static void insert_into_address_table(address_table_t address_tables[NUM_SLOTS], slotidx_t slot,
                                       hls::stream<insert_stream_t> &insert_stream,
-                                      int numR)
+                                      hls::stream<bool> &eos)
 {
-  for (int i = 0; i < numR; i++)
+#pragma HLS FUNCTION_INSTANTIATE variable = slot
+  while (1)
   {
 #pragma HLS PIPELINE II = 1
+    bool end = eos.read();
+    if (end)
+    {
+      break;
+    }
+
     insert_stream_t insert_stream_in = insert_stream.read();
 
     // insert new tuple
-    address_tables[insert_stream_in.insert_slot].entries[insert_stream_in.at_insert_loc].rid = insert_stream_in.rid;
-    address_tables[insert_stream_in.insert_slot].entries[insert_stream_in.at_insert_loc].key = insert_stream_in.key;
-    address_tables[insert_stream_in.insert_slot].entries[insert_stream_in.at_insert_loc].next = 0;
+    address_tables[slot].entries[insert_stream_in.at_insert_loc].rid = insert_stream_in.rid;
+    address_tables[slot].entries[insert_stream_in.at_insert_loc].key = insert_stream_in.key;
+    address_tables[slot].entries[insert_stream_in.at_insert_loc].next = 0;
 
     if (insert_stream_in.head == insert_stream_in.at_insert_loc)
     {
@@ -219,12 +234,12 @@ static void insert_into_address_table(address_table_t address_tables[NUM_SLOTS],
 
     // Insert into chain
     atindex_t curr = insert_stream_in.head;
-    while (address_tables[insert_stream_in.insert_slot].entries[curr].next != 0)
+    while (address_tables[slot].entries[curr].next != 0)
     {
-      curr = address_tables[insert_stream_in.insert_slot].entries[curr].next;
+      curr = address_tables[slot].entries[curr].next;
     }
 
-    address_tables[insert_stream_in.insert_slot].entries[curr].next = insert_stream_in.at_insert_loc;
+    address_tables[slot].entries[curr].next = insert_stream_in.at_insert_loc;
 
     /**
      * Observe that if head == at_insert_loc, then we create 1 length chain.
@@ -235,19 +250,23 @@ static void insert_into_address_table(address_table_t address_tables[NUM_SLOTS],
 static void build(bucket_t buckets[NUM_BUCKETS], address_table_t address_tables[NUM_SLOTS], input_tuple_t *relR, int numR)
 {
   static hls::stream<tuple_stream_in_t> tuple_stream;
-  static hls::stream<insert_stream_t> insert_stream;
+  static hls::stream<insert_stream_t> insert_streams[NUM_SLOTS];
+  static hls::stream<bool> eos[NUM_SLOTS];
 
 /** Need to make tuple_stream a PIPO to prevent deadlocks */
 #pragma HLS stream type = pipo variable = tuple_stream
 /** As long at the chains don't get absurdley long, then we don't need
  * make this a PIPO since inserts will be faster than searches. This is
  * just my theory at the moment though. */
-#pragma HLS stream type = pipo variable = insert_stream
+#pragma HLS stream type = pipo variable = insert_streams
 
 #pragma HLS DATAFLOW
   get_new_tuple(relR, tuple_stream, numR);
-  find_slot(buckets, tuple_stream, insert_stream, numR);
-  insert_into_address_table(address_tables, insert_stream, numR);
+  find_slot(buckets, tuple_stream, insert_streams, eos, numR);
+  insert_into_address_table(address_tables, 0, insert_streams[0], eos[0]);
+  insert_into_address_table(address_tables, 1, insert_streams[1], eos[1]);
+  insert_into_address_table(address_tables, 2, insert_streams[2], eos[2]);
+  insert_into_address_table(address_tables, 3, insert_streams[3], eos[3]);
 }
 
 static void search_address_table(address_table_t address_tables[NUM_SLOTS],
@@ -289,7 +308,6 @@ static void search(bucket_t buckets[NUM_BUCKETS],
     hash_t hash1 = tuple.hash1;
     hash_t hash2 = tuple.hash2;
 
-
     for (int slot_idx_ = 0; slot_idx_ < NUM_SLOTS; slot_idx_++)
     {
 #pragma HLS dependence variable = buckets type = intra false // apparently these are removed since the loop is unrolled automatically?
@@ -312,7 +330,8 @@ static void search(bucket_t buckets[NUM_BUCKETS],
 
 static void write_output(hls::stream<output_tuple_t> &output_stream,
                          hls::stream<bool> &eos,
-                         output_tuple_t *relRS)
+                         output_tuple_t *relRS,
+                         int *numResult)
 {
   int i = 0;
   while (1)
@@ -320,6 +339,7 @@ static void write_output(hls::stream<output_tuple_t> &output_stream,
     bool end = eos.read();
     if (end)
     {
+      *numResult = i;
       break;
     }
     output_tuple_t output_tuple = output_stream.read();
@@ -328,7 +348,12 @@ static void write_output(hls::stream<output_tuple_t> &output_stream,
   }
 }
 
-static void probe(bucket_t buckets[NUM_BUCKETS], address_table_t address_tables[NUM_SLOTS], input_tuple_t *relS, output_tuple_t *relRS, int numS)
+static void probe(bucket_t buckets[NUM_BUCKETS],
+                  address_table_t address_tables[NUM_SLOTS],
+                  input_tuple_t *relS,
+                  output_tuple_t *relRS,
+                  int *numResult,
+                  int numS)
 {
   static hls::stream<tuple_stream_in_t> tuple_stream;
   static hls::stream<output_tuple_t> output_stream;
@@ -342,7 +367,7 @@ static void probe(bucket_t buckets[NUM_BUCKETS], address_table_t address_tables[
 #pragma HLS DATAFLOW
   get_new_tuple(relS, tuple_stream, numS);
   search(buckets, address_tables, tuple_stream, output_stream, eos, numS);
-  write_output(output_stream, eos, relRS);
+  write_output(output_stream, eos, relRS, numResult);
 }
 
 extern "C"
@@ -350,6 +375,7 @@ extern "C"
   void kml_join(input_tuple_t *relR,
                 input_tuple_t *relS,
                 output_tuple_t *relRS,
+                int *numResult,
                 int numR,
                 int numS)
   {
@@ -358,9 +384,11 @@ extern "C"
 #pragma HLS INTERFACE m_axi port = relR depth = num_tuples bundle = gmem0
 #pragma HLS INTERFACE m_axi port = relS depth = num_tuples bundle = gmem1
 #pragma HLS INTERFACE m_axi port = relRS depth = num_tuples bundle = gmem2
+#pragma HLS INTERFACE m_axi port = numResult depth = 1 bundle = gmem2
 #pragma HLS INTERFACE s_axilite port = relR bundle = control
 #pragma HLS INTERFACE s_axilite port = relS bundle = control
 #pragma HLS INTERFACE s_axilite port = relRS bundle = control
+#pragma HLS INTERFACE s_axilite port = numResult bundle = control
 #pragma HLS INTERFACE s_axilite port = numR bundle = control
 #pragma HLS INTERFACE s_axilite port = numS bundle = control
 #pragma HLS INTERFACE s_axilite port = return bundle = control
@@ -369,6 +397,6 @@ extern "C"
 #pragma HLS array_partition variable = address_tables type = complete dim = 1
 
     build(buckets, address_tables, relR, numR);
-    probe(buckets, address_tables, relS, relRS, numS);
+    probe(buckets, address_tables, relS, relRS, numResult, numS);
   }
 }

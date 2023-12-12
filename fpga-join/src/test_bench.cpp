@@ -11,6 +11,7 @@ int main()
     input_tuple_t *a = (input_tuple_t *)calloc(DATA_SIZE, sizeof(input_tuple_t));
     input_tuple_t *b = (input_tuple_t *)calloc(DATA_SIZE, sizeof(input_tuple_t));
     output_tuple_t *c = (output_tuple_t *)calloc(DATA_SIZE, sizeof(output_tuple_t));
+    int output_size;
 
     int retval = 0, i, i_trans, tmp;
     // Load input data from files
@@ -25,10 +26,10 @@ int main()
     // Execute the function multiple times (multiple transactions)
     for (i_trans = 0; i_trans < NUM_TRANS; i_trans++)
     {
-        kml_join(a, b, c, DATA_SIZE, DATA_SIZE);
+        kml_join(a, b, c, &output_size, DATA_SIZE, DATA_SIZE);
     }
 
-    retval = check_result(a, b, c, DATA_SIZE, DATA_SIZE);
+    retval = check_result(a, b, c, DATA_SIZE, DATA_SIZE, output_size);
 
     // Print Results
     if (retval == 0)

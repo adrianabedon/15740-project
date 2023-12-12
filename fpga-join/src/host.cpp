@@ -95,6 +95,7 @@ int main(int argc, char *argv[])
   input_tuple_t *ptr_input1 = (input_tuple_t *)q.enqueueMapBuffer(buffer_input1, CL_TRUE, CL_MAP_WRITE, 0, input_size_in_bytes);
   input_tuple_t *ptr_input2 = (input_tuple_t *)q.enqueueMapBuffer(buffer_input2, CL_TRUE, CL_MAP_WRITE, 0, input_size_in_bytes);
   output_tuple_t *ptr_result = (output_tuple_t *)q.enqueueMapBuffer(buffer_result, CL_TRUE, CL_MAP_READ, 0, output_size_in_bytes);
+  int *result_size = (int *)q.enqueueMapBuffer(buffer_result, CL_TRUE, CL_MAP_READ, 0, sizeof(int));
 
   // setting input data
   for (int i = 0; i < NUM_INPUT_TUPLES; i++)
@@ -118,6 +119,7 @@ int main(int argc, char *argv[])
   kml_join.setArg(narg++, buffer_input1);
   kml_join.setArg(narg++, buffer_input2);
   kml_join.setArg(narg++, buffer_result);
+  kml_join.setArg(narg++, result_size);
   kml_join.setArg(narg++, NUM_INPUT_TUPLES);
   kml_join.setArg(narg++, NUM_INPUT_TUPLES);
 
@@ -142,7 +144,7 @@ int main(int argc, char *argv[])
   q.finish();
 
   
-  int retval = check_result(ptr_input1, ptr_input2, ptr_result, NUM_INPUT_TUPLES, NUM_INPUT_TUPLES);
+  int retval = check_result(ptr_input1, ptr_input2, ptr_result, NUM_INPUT_TUPLES, NUM_INPUT_TUPLES, *result_size);
   if (retval)
   {
     std::cout << "xxxxxxxxx\nTEST FAILED\nxxxxxxxxx" << std::endl;

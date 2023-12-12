@@ -3,7 +3,7 @@
 #include <map>
 #include <iostream>
 
-int check_result(input_tuple_t *relR, input_tuple_t *relS, output_tuple_t *relRS, int numr, int nums)
+int check_result(input_tuple_t *relR, input_tuple_t *relS, output_tuple_t *relRS, int numr, int nums, int numrs)
 {
   // Verify the result
   // Map of key -> rid1 in first table
@@ -32,7 +32,7 @@ int check_result(input_tuple_t *relR, input_tuple_t *relS, output_tuple_t *relRS
     }
   }
 
-  for (int i = 0; i < nums; i++)
+  for (int i = 0; i < numrs; i++)
   {
     auto rid2 = relRS[i].rid2;
     if (rid_map.find(rid2) != rid_map.end())
