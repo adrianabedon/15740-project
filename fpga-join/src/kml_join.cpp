@@ -204,7 +204,7 @@ static void find_slot(bucket_t buckets[NUM_BUCKETS],
   }
 }
 
-static void insert_into_address_table(address_table_t *address_table
+static void insert_into_address_table(address_table_t *address_table,
                                           hls::stream<insert_stream_t> &insert_stream,
                                       hls::stream<bool> &eos)
 {
@@ -386,7 +386,8 @@ static void write_output(hls::stream<output_tuple_t> &output_stream,
 }
 
 static void probe(bucket_t buckets[NUM_BUCKETS],
-                  address_table_t address_tables[NUM_SLOTS],
+                   address_table_t *address_table1, address_table_t *address_table2,
+                   address_table_t *address_table3, address_table_t *address_table4,
                   input_tuple_t *relS,
                   output_tuple_t *relRS,
                   int *numResult,
@@ -403,7 +404,9 @@ static void probe(bucket_t buckets[NUM_BUCKETS],
 
 #pragma HLS DATAFLOW
   get_new_tuple(relS, tuple_stream, numS);
-  search(buckets, address_tables, tuple_stream, output_stream, eos, numS);
+  search(buckets, 
+    address_table1, address_table2, address_table3, address_table4, 
+    tuple_stream, output_stream, eos, numS);
   write_output(output_stream, eos, relRS, numResult);
 }
 
