@@ -15,7 +15,6 @@ typedef struct insert_steam
 {
   RID_t rid;
   Key_t key;
-  slotidx_t insert_slot;
   atindex_t at_insert_loc;
   atindex_t head;
 } insert_stream_t;
@@ -191,7 +190,6 @@ static void find_slot(bucket_t buckets[NUM_BUCKETS],
     insert_stream_t insert_stream_out;
     insert_stream_out.rid = tuple.rid;
     insert_stream_out.key = tuple.key;
-    insert_stream_out.insert_slot = insert_slot;
     insert_stream_out.at_insert_loc = at_insert_loc;
     insert_stream_out.head = head;
     eos[insert_slot].write(false);
