@@ -1,3 +1,6 @@
+#ifndef KML_JOIN_HPP
+#define KML_JOIN_HPP
+
 #include <ap_int.h>
 #include <hls_stream.h>
 #include <stdint.h>
@@ -66,3 +69,5 @@ extern "C" {
 void kml_join(input_tuple_t *relR, input_tuple_t *relS, output_tuple_t *relRS,
               int numR, int numS);
 }
+
+#endif

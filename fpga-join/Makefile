@@ -67,7 +67,7 @@ LDFLAGS += $(opencl_LDFLAGS)
 ############################## Setting up Host Variables ##############################
 #Include Required Host Source Files
 CXXFLAGS += -I$(ABS_COMMON_REPO)/common/includes/xcl2
-HOST_SRCS += $(ABS_COMMON_REPO)/common/includes/xcl2/xcl2.cpp src/host.cpp 
+HOST_SRCS += $(ABS_COMMON_REPO)/common/includes/xcl2/xcl2.cpp src/check_result.cpp src/host.cpp
 # Host compiler global settings
 CXXFLAGS += -fmessage-length=0
 LDFLAGS += -lrt -lstdc++ 

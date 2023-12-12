@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include "kml_join.hpp"
+#include "check_result.hpp"
 
 #define NUM_TRANS 1
 #define DATA_SIZE NUM_TUPLES
@@ -27,15 +28,7 @@ int main()
         kml_join(a, b, c, DATA_SIZE, DATA_SIZE);
     }
 
-    for (i = 0; i < DATA_SIZE; i++)
-    {
-        // printf("%d: Rid(1)%d Rid(2)%d Key %d\n", i, c[i].rid1, c[i].rid2, c[i].key);
-        bool match = (c[i].key == i) && (c[i].rid1 == i) && (c[i].rid2 == (i+DATA_SIZE));
-        if (!match) {
-            retval = 1;
-            break;
-        }
-    }
+    retval = check_result(a, b, c, DATA_SIZE, DATA_SIZE);
 
     // Print Results
     if (retval == 0)

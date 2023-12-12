@@ -1,6 +1,8 @@
 #include "kml_join.hpp"
 #include <iostream>
 
+const unsigned int num_tuples = NUM_TUPLES;
+
 typedef struct tuple_stream_in
 {
   RID_t rid;
@@ -236,11 +238,11 @@ static void build(bucket_t buckets[NUM_BUCKETS], address_table_t address_tables[
   static hls::stream<insert_stream_t> insert_stream;
 
 /** Need to make tuple_stream a PIPO to prevent deadlocks */
-#pragma HLS stream type=pipo variable = tuple_stream
+#pragma HLS stream type = pipo variable = tuple_stream
 /** As long at the chains don't get absurdley long, then we don't need
-  * make this a PIPO since inserts will be faster than searches. This is
-  * just my theory at the moment though. */
-#pragma HLS stream type=fifo variable = insert_stream
+ * make this a PIPO since inserts will be faster than searches. This is
+ * just my theory at the moment though. */
+#pragma HLS stream type = fifo variable = insert_stream
 
 #pragma HLS DATAFLOW
   get_new_tuple(relR, tuple_stream, numR);
@@ -331,9 +333,9 @@ static void probe(bucket_t buckets[NUM_BUCKETS], address_table_t address_tables[
   hls::stream<bool> eos;
 
 /** Need to make tuple_stream a PIPO to prevent deadlocks */
-#pragma HLS stream type=pipo variable = tuple_stream
-#pragma HLS stream type=fifo variable = output_stream
-#pragma HLS stream type=fifo variable = eos
+#pragma HLS stream type = pipo variable = tuple_stream
+#pragma HLS stream type = fifo variable = output_stream
+#pragma HLS stream type = fifo variable = eos
 
 #pragma HLS DATAFLOW
   get_new_tuple(relS, tuple_stream, numS);
@@ -350,10 +352,10 @@ extern "C"
                 int numS)
   {
 /** You HAVE to set the depth to the size of the input for cosimulation. Otherwise if will
-  * fail and the error sucks at explaining what happened. */
-#pragma HLS INTERFACE m_axi port = relR depth = NUM_TUPLES bundle = gmem0
-#pragma HLS INTERFACE m_axi port = relS depth = NUM_TUPLES bundle = gmem1
-#pragma HLS INTERFACE m_axi port = relRS depth = NUM_TUPLES bundle = gmem2 
+ * fail and the error sucks at explaining what happened. */
+#pragma HLS INTERFACE m_axi port = relR depth = num_tuples bundle = gmem0
+#pragma HLS INTERFACE m_axi port = relS depth = num_tuples bundle = gmem1
+#pragma HLS INTERFACE m_axi port = relRS depth = num_tuples bundle = gmem2
 #pragma HLS INTERFACE s_axilite port = relR bundle = control
 #pragma HLS INTERFACE s_axilite port = relS bundle = control
 #pragma HLS INTERFACE s_axilite port = relRS bundle = control
