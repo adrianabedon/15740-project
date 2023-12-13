@@ -119,28 +119,32 @@ static void find_slot(bucket_t buckets[NUM_BUCKETS],
     tuple_stream_in_t tuple = tuple_stream.read();
     hash_t hash1 = tuple.hash1;
     hash_t hash2 = tuple.hash2;
-    slotidx_t slot1_idx = buckets[hash1].collision_slot;
-    slotidx_t slot2_idx = buckets[hash2].collision_slot;
     slotidx_t insert_slot;
     hash_t insert_bucket;
     hash_t tag;
     atindex_t head;
     bool chain = true;
-    if (buckets[hash1].slots[slot1_idx].status == 0)
+
+    for (int slot_idx_ = 0; slot_idx_ < NUM_SLOTS; slot_idx_++)
     {
-      chain = false;
-      insert_slot = slot1_idx;
-      insert_bucket = hash1;
-      tag = hash2;
+#pragma HLS unroll
+      if (buckets[hash1].slots[slot_idx_].status == 0)
+      {
+        chain = false;
+        insert_slot = slot_idx_;
+        insert_bucket = hash1;
+        tag = hash2;
+      }
+      else if (hash1 != hash2 && buckets[hash2].slots[slot_idx_].status == 0)
+      {
+        chain = false;
+        insert_slot = slot_idx_;
+        insert_bucket = hash2;
+        tag = hash1;
+      }
     }
-    else if (hash1 != hash2 && buckets[hash2].slots[slot2_idx].status == 0)
-    {
-      chain = false;
-      insert_slot = slot2_idx;
-      insert_bucket = hash2;
-      tag = hash1;
-    }
-    else
+
+    if (chain)
     {
       /** No empty slot, try to eject a slot. */
       for (int slot_idx_ = 0; slot_idx_ < NUM_SLOTS; slot_idx_++)
@@ -171,13 +175,10 @@ static void find_slot(bucket_t buckets[NUM_BUCKETS],
         // no need to change the slot's status, tag, or head
         insert_slot = buckets[hash1].collision_slot;
         insert_bucket = hash1;
+        buckets[hash1].collision_slot = (buckets[hash1].collision_slot + 1);
       }
     }
-    /** Always increment the collision slot. If there is an empty slot, then now we will insert
-     * into the next empty slot. If we evicted a slot, then this doesn't really matter.
-     * If we are chaining, then this will chain in the next slot.
-     */
-    buckets[insert_bucket].collision_slot = (buckets[insert_bucket].collision_slot + 1);
+
 
     /** Insert into the selected slot */
     buckets[insert_bucket].slots[insert_slot].status = 1;
