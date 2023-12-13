@@ -107,6 +107,7 @@ static void find_slot(bucket_t buckets[NUM_BUCKETS],
 
   for (int i = 0; i < numR; i++)
   {
+#pragma HLS PIPELINE off
     tuple_stream_in_t tuple = tuple_stream.read();
     hash_t hash1 = tuple.hash1;
     hash_t hash2 = tuple.hash2;
@@ -205,13 +206,13 @@ static void find_slot(bucket_t buckets[NUM_BUCKETS],
 }
 
 static void insert_into_address_table(address_table_t *address_table,
-                                          hls::stream<insert_stream_t> &insert_stream,
+                                      hls::stream<insert_stream_t> &insert_stream,
                                       hls::stream<bool> &eos)
 {
-#pragma HLS FUNCTION_INSTANTIATE variable = address_table
+  // #pragma HLS FUNCTION_INSTANTIATE variable = address_table
   while (1)
   {
-#pragma HLS PIPELINE II = 1
+#pragma HLS PIPELINE off
     bool end = eos.read();
     if (end)
     {
@@ -271,31 +272,6 @@ static void build(bucket_t buckets[NUM_BUCKETS],
   insert_into_address_table(address_table4, insert_streams[3], eos[3]);
 }
 
-static void search_address_table(address_table_t *address_table,
-                                 RID_t rid,
-                                 Key_t key,
-                                 atindex_t head,
-                                 hls::stream<output_tuple_t> &output_stream,
-                                 hls::stream<bool> &eos)
-{
-#pragma HLS FUNCTION_INSTANTIATE variable = address_table
-  atindex_t curr = head;
-  do
-  {
-    if (address_table->entries[curr].key == key)
-    {
-      output_tuple_t output_tuple;
-      output_tuple.rid1 = address_table->entries[curr].rid;
-      output_tuple.rid2 = rid;
-      output_tuple.key = key;
-      output_stream.write(output_tuple);
-      eos.write(false);
-      return;
-    }
-    curr = address_table->entries[curr].next;
-  } while (curr != 0);
-}
-
 static void search(bucket_t buckets[NUM_BUCKETS],
                    address_table_t *address_table1, address_table_t *address_table2,
                    address_table_t *address_table3, address_table_t *address_table4,
@@ -304,9 +280,12 @@ static void search(bucket_t buckets[NUM_BUCKETS],
                    hls::stream<bool> &eos,
                    int numS)
 {
+  address_table_t *address_tables[4] = {address_table1, address_table2, address_table3, address_table4};
+  status_t statuses[8];
+  atindex_t curr[8];
+  int tuple_out = 0;
   for (int i = 0; i < numS; i++)
   {
-#pragma HLS PIPELINE II = 1
     tuple_stream_in_t tuple = tuple_stream.read();
     hash_t hash1 = tuple.hash1;
     hash_t hash2 = tuple.hash2;
@@ -314,52 +293,95 @@ static void search(bucket_t buckets[NUM_BUCKETS],
 #pragma HLS DEPENDENCE variable = buckets->slots->status intra false
 #pragma HLS DEPENDENCE variable = buckets->slots->head intra false
 
-    // Search address table 1
-    if (buckets[hash1].slots[0].status == 1)
+    for (int j = 0; j < 4; j++)
     {
-      atindex_t head = buckets[hash1].slots[0].head;
-      search_address_table(address_table1, tuple.rid, tuple.key, head, output_stream, eos);
+#pragma HLS unroll
+      statuses[2 * j] = buckets[hash1].slots[j].status;
+      statuses[2 * j + 1] = buckets[hash2].slots[j].status;
     }
-    if (hash1 != hash2 && buckets[hash2].slots[0].status == 1)
+    for (int j = 0; j < 4; j++)
     {
-      atindex_t head = buckets[hash2].slots[0].head;
-      search_address_table(address_table1, tuple.rid, tuple.key, head, output_stream, eos);
-    }
-
-    // Search address table 2
-    if (buckets[hash1].slots[1].status == 1)
-    {
-      atindex_t head = buckets[hash1].slots[1].head;
-      search_address_table(address_table2, tuple.rid, tuple.key, head, output_stream, eos);
-    }
-    if (hash1 != hash2 && buckets[hash2].slots[1].status == 1)
-    {
-      atindex_t head = buckets[hash2].slots[1].head;
-      search_address_table(address_table2, tuple.rid, tuple.key, head, output_stream, eos);
+#pragma HLS unroll
+      curr[2 * j] = buckets[hash1].slots[j].head;
+      curr[2 * j + 1] = buckets[hash2].slots[j].head;
     }
 
-    // Search address table 3
-    if (buckets[hash1].slots[2].status == 1)
+    while (1)
     {
-      atindex_t head = buckets[hash1].slots[2].head;
-      search_address_table(address_table3, tuple.rid, tuple.key, head, output_stream, eos);
-    }
-    if (hash1 != hash2 && buckets[hash2].slots[2].status == 1)
-    {
-      atindex_t head = buckets[hash2].slots[2].head;
-      search_address_table(address_table3, tuple.rid, tuple.key, head, output_stream, eos);
-    }
+#pragma HLS PIPELINE II = 1
+      compare bool output = false;
+      output_tuple_t output_tuple;
+      for (int j = 0; j < 4; j++)
+      {
+#pragma HLS unroll
+        if (statuses[2 * j] == 1)
+        {
+          if (address_tables[j]->entries[curr[2 * j]].key == tuple.key)
+          {
+            output_tuple.rid1 = address_tables[j]->entries[curr[2 * j]].rid;
+            output_tuple.rid2 = tuple.rid;
+            output_tuple.key = tuple.key;
+            output = true;
+          }
+        }
+        if (statuses[2 * j + 1] == 1)
+        {
+          if (address_tables[j]->entries[curr[2 * j + 1]].key == tuple.key)
+          {
+            output_tuple.rid1 = address_tables[j]->entries[curr[2 * j + 1]].rid;
+            output_tuple.rid2 = tuple.rid;
+            output_tuple.key = tuple.key;
+            output = true;
+          }
+        }
+      }
 
-    // Search address table 4
-    if (buckets[hash1].slots[3].status == 1)
-    {
-      atindex_t head = buckets[hash1].slots[3].head;
-      search_address_table(address_table4, tuple.rid, tuple.key, head, output_stream, eos);
-    }
-    if (hash1 != hash2 && buckets[hash2].slots[3].status == 1)
-    {
-      atindex_t head = buckets[hash2].slots[3].head;
-      search_address_table(address_table4, tuple.rid, tuple.key, head, output_stream, eos);
+      if (output)
+      {
+        output_stream.write(output_tuple);
+        eos.write(false);
+      }
+
+      // go to next
+      for (int j = 0; j < 4; j++)
+      {
+#pragma HLS unroll
+        if (statuses[2 * j] == 1)
+        {
+          atindex_t next = address_tables[j]->entries[curr[2 * j]].next;
+          curr[2 * j] = next;
+          if (next == 0)
+          {
+            statuses[2 * j] = 0;
+          }
+        }
+        if (statuses[2 * j + 1] == 1)
+        {
+          atindex_t next = address_tables[j]->entries[curr[2 * j + 1]].next;
+          curr[2 * j + 1] = next;
+          if (next == 0)
+          {
+            statuses[2 * j + 1] = 0;
+          }
+        }
+      }
+
+      // check if done
+      bool done = true;
+      for (int j = 0; j < 8; j++)
+      {
+#pragma HLS unroll
+        if (statuses[j] == 1)
+        {
+          done = false;
+          break;
+        }
+      }
+
+      if (done)
+      {
+        break;
+      }
     }
   }
   eos.write(true);
@@ -386,8 +408,8 @@ static void write_output(hls::stream<output_tuple_t> &output_stream,
 }
 
 static void probe(bucket_t buckets[NUM_BUCKETS],
-                   address_table_t *address_table1, address_table_t *address_table2,
-                   address_table_t *address_table3, address_table_t *address_table4,
+                  address_table_t *address_table1, address_table_t *address_table2,
+                  address_table_t *address_table3, address_table_t *address_table4,
                   input_tuple_t *relS,
                   output_tuple_t *relRS,
                   int *numResult,
@@ -398,15 +420,15 @@ static void probe(bucket_t buckets[NUM_BUCKETS],
   hls::stream<bool> eos;
 
 /** Need to make tuple_stream a PIPO to prevent deadlocks */
-#pragma HLS stream type = pipo variable = tuple_stream
-#pragma HLS stream type = pipo variable = output_stream
-#pragma HLS stream type = pipo variable = eos
+#pragma HLS stream type = fifo variable = tuple_stream
+#pragma HLS stream type = fifo variable = output_stream
+#pragma HLS stream type = fifo variable = eos
 
 #pragma HLS DATAFLOW
   get_new_tuple(relS, tuple_stream, numS);
-  search(buckets, 
-    address_table1, address_table2, address_table3, address_table4, 
-    tuple_stream, output_stream, eos, numS);
+  search(buckets,
+         address_table1, address_table2, address_table3, address_table4,
+         tuple_stream, output_stream, eos, numS);
   write_output(output_stream, eos, relRS, numResult);
 }
 
