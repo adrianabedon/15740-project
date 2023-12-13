@@ -11,7 +11,7 @@
 #define NUM_ADDRESS_TABLES_SLOT \
   10000 // this is the number of slots in each address table
        // max size of inner relation in NUM_SLOT * NUM_ADDRESS_TABLES_SLOT
-#define NUM_TUPLES 5000
+#define NUM_TUPLES 10000
 
 // they use 12 bit wide hash function
 /** We are implementing N to 1 join, so if the tuple in the second

@@ -445,9 +445,10 @@ static void probe(bucket_t buckets[NUM_BUCKETS],
   hls::stream<bool> eos;
 
 /** Need to make tuple_stream a PIPO to prevent deadlocks */
-#pragma HLS stream type = fifo variable = tuple_stream
-#pragma HLS stream type = fifo variable = output_stream
-#pragma HLS stream type = fifo variable = eos
+#pragma HLS stream type = pipo variable = tuple_stream
+#pragma HLS stream type = pipo variable = lookup_stream
+#pragma HLS stream type = pipo variable = output_stream
+#pragma HLS stream type = pipo variable = eos
 
 #pragma HLS DATAFLOW
   get_new_tuple(relS, tuple_stream, numS);
