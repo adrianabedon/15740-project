@@ -4,7 +4,7 @@
 #include <chrono>
 #include "join.h"
 
-#define DATA_SIZE 10000
+#define DATA_SIZE 30000
 
 int main()
 {
@@ -30,14 +30,15 @@ int main()
     std::shuffle(relR.begin(), relR.end(), g); // Use std::shuffle instead of std::random_shuffle
 
     std::cout << "Joining..." << std::endl;
-    auto kernel_start = std::chrono::high_resolution_clock::now();
+    clock_t time_req;
+    time_req = clock();
 
     join->Join(relR, relS, relRS);
 
-    auto kernel_end = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> kernel_time = kernel_end - kernel_start;
-    std::cout << "Kernel time: " << kernel_time.count() << " s" << std::endl;
-    double throughput = (double)2 * DATA_SIZE / kernel_time.count();
+    time_req = clock() - time_req;
+    double time_taken = ((double)time_req) / CLOCKS_PER_SEC; // calculate the elapsed time
+    std::cout << "Kernel time: " << time_taken << " s" << std::endl;
+    double throughput = (double)2 * DATA_SIZE / time_taken;
     std::cout << "Throughput: " << (int)throughput << " tuples/s" << std::endl;
 
     std::cout << "Printing..." << std::endl;
