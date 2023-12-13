@@ -19,6 +19,14 @@ typedef struct insert_steam
   atindex_t head;
 } insert_stream_t;
 
+typedef struct
+{
+  RID_t rid;
+  Key_t key;
+  status_t statuses[8];
+  atindex_t curr[8];
+} lookup_stream_t;
+
 static hash_t hash1(Key_t key)
 {
 #pragma HLS INLINE
@@ -272,65 +280,42 @@ static void build(bucket_t buckets[NUM_BUCKETS],
   insert_into_address_table(address_table4, insert_streams[3], eos[3]);
 }
 
-static void search(bucket_t buckets[NUM_BUCKETS],
-                   address_table_t *address_table1, address_table_t *address_table2,
-                   address_table_t *address_table3, address_table_t *address_table4,
-                   hls::stream<tuple_stream_in_t> &tuple_stream,
-                   hls::stream<output_tuple_t> &output_stream,
-                   hls::stream<bool> &eos,
-                   int numS)
+static void table_lookup(address_table_t *address_table1, address_table_t *address_table2,
+                         address_table_t *address_table3, address_table_t *address_table4,
+                         hls::stream<lookup_stream_t> &lookup_stream,
+                         hls::stream<output_tuple_t> &output_stream,
+                         hls::stream<bool> &eos,
+                         int numS)
 {
   address_table_t *address_tables[4] = {address_table1, address_table2, address_table3, address_table4};
-  status_t statuses[8];
-  atindex_t curr[8];
-  int tuple_out = 0;
   for (int i = 0; i < numS; i++)
   {
-    tuple_stream_in_t tuple = tuple_stream.read();
-    hash_t hash1 = tuple.hash1;
-    hash_t hash2 = tuple.hash2;
-
-#pragma HLS DEPENDENCE variable = buckets->slots->status intra false
-#pragma HLS DEPENDENCE variable = buckets->slots->head intra false
-
-    for (int j = 0; j < 4; j++)
-    {
-#pragma HLS unroll
-      statuses[2 * j] = buckets[hash1].slots[j].status;
-      statuses[2 * j + 1] = buckets[hash2].slots[j].status;
-    }
-    for (int j = 0; j < 4; j++)
-    {
-#pragma HLS unroll
-      curr[2 * j] = buckets[hash1].slots[j].head;
-      curr[2 * j + 1] = buckets[hash2].slots[j].head;
-    }
-
+    lookup_stream_t lookup_stream_in = lookup_stream.read();
+    bool output = false;
+    output_tuple_t output_tuple;
     while (1)
     {
 #pragma HLS PIPELINE II = 1
-      compare bool output = false;
-      output_tuple_t output_tuple;
       for (int j = 0; j < 4; j++)
       {
 #pragma HLS unroll
-        if (statuses[2 * j] == 1)
+        if (lookup_stream_in.statuses[2 * j] == 1)
         {
-          if (address_tables[j]->entries[curr[2 * j]].key == tuple.key)
+          if (address_tables[j]->entries[lookup_stream_in.curr[2 * j]].key == lookup_stream_in.key)
           {
-            output_tuple.rid1 = address_tables[j]->entries[curr[2 * j]].rid;
-            output_tuple.rid2 = tuple.rid;
-            output_tuple.key = tuple.key;
+            output_tuple.rid1 = address_tables[j]->entries[lookup_stream_in.curr[2 * j]].rid;
+            output_tuple.rid2 = lookup_stream_in.rid;
+            output_tuple.key = lookup_stream_in.key;
             output = true;
           }
         }
-        if (statuses[2 * j + 1] == 1)
+        if (lookup_stream_in.statuses[2 * j + 1] == 1)
         {
-          if (address_tables[j]->entries[curr[2 * j + 1]].key == tuple.key)
+          if (address_tables[j]->entries[lookup_stream_in.curr[2 * j + 1]].key == lookup_stream_in.key)
           {
-            output_tuple.rid1 = address_tables[j]->entries[curr[2 * j + 1]].rid;
-            output_tuple.rid2 = tuple.rid;
-            output_tuple.key = tuple.key;
+            output_tuple.rid1 = address_tables[j]->entries[lookup_stream_in.curr[2 * j + 1]].rid;
+            output_tuple.rid2 = lookup_stream_in.rid;
+            output_tuple.key = lookup_stream_in.key;
             output = true;
           }
         }
@@ -346,22 +331,22 @@ static void search(bucket_t buckets[NUM_BUCKETS],
       for (int j = 0; j < 4; j++)
       {
 #pragma HLS unroll
-        if (statuses[2 * j] == 1)
+        if (lookup_stream_in.statuses[2 * j] == 1)
         {
-          atindex_t next = address_tables[j]->entries[curr[2 * j]].next;
-          curr[2 * j] = next;
+          atindex_t next = address_tables[j]->entries[lookup_stream_in.curr[2 * j]].next;
+          lookup_stream_in.curr[2 * j] = next;
           if (next == 0)
           {
-            statuses[2 * j] = 0;
+            lookup_stream_in.statuses[2 * j] = 0;
           }
         }
-        if (statuses[2 * j + 1] == 1)
+        if (lookup_stream_in.statuses[2 * j + 1] == 1)
         {
-          atindex_t next = address_tables[j]->entries[curr[2 * j + 1]].next;
-          curr[2 * j + 1] = next;
+          atindex_t next = address_tables[j]->entries[lookup_stream_in.curr[2 * j + 1]].next;
+          lookup_stream_in.curr[2 * j + 1] = next;
           if (next == 0)
           {
-            statuses[2 * j + 1] = 0;
+            lookup_stream_in.statuses[2 * j + 1] = 0;
           }
         }
       }
@@ -371,20 +356,58 @@ static void search(bucket_t buckets[NUM_BUCKETS],
       for (int j = 0; j < 8; j++)
       {
 #pragma HLS unroll
-        if (statuses[j] == 1)
+        if (lookup_stream_in.statuses[j] == 1)
         {
           done = false;
           break;
         }
       }
 
-      if (done)
+      if (done || output)
       {
         break;
       }
     }
   }
   eos.write(true);
+}
+
+static void search(bucket_t buckets[NUM_BUCKETS],
+                   hls::stream<tuple_stream_in_t> &tuple_stream,
+                   hls::stream<lookup_stream_t> &lookup_stream,
+                   //  hls::stream<output_tuple_t> &output_stream,
+                   //  hls::stream<bool> &eos,
+                   int numS)
+{
+  for (int i = 0; i < numS; i++)
+  {
+    tuple_stream_in_t tuple = tuple_stream.read();
+    hash_t hash1 = tuple.hash1;
+    hash_t hash2 = tuple.hash2;
+
+    lookup_stream_t lookup_stream_out;
+
+#pragma HLS DEPENDENCE variable = buckets->slots->status intra false
+#pragma HLS DEPENDENCE variable = buckets->slots->head intra false
+
+    for (int j = 0; j < 4; j++)
+    {
+#pragma HLS unroll
+      lookup_stream_out.statuses[2 * j] = buckets[hash1].slots[j].status;
+      lookup_stream_out.statuses[2 * j + 1] = buckets[hash2].slots[j].status;
+    }
+    for (int j = 0; j < 4; j++)
+    {
+#pragma HLS unroll
+      lookup_stream_out.curr[2 * j] = buckets[hash1].slots[j].head;
+      lookup_stream_out.curr[2 * j + 1] = buckets[hash2].slots[j].head;
+    }
+
+    lookup_stream_out.rid = tuple.rid;
+    lookup_stream_out.key = tuple.key;
+
+    lookup_stream.write(lookup_stream_out);
+  }
 }
 
 static void write_output(hls::stream<output_tuple_t> &output_stream,
@@ -416,6 +439,7 @@ static void probe(bucket_t buckets[NUM_BUCKETS],
                   int numS)
 {
   static hls::stream<tuple_stream_in_t> tuple_stream;
+  static hls::stream<lookup_stream_t> lookup_stream;
   static hls::stream<output_tuple_t> output_stream;
   hls::stream<bool> eos;
 
@@ -426,9 +450,8 @@ static void probe(bucket_t buckets[NUM_BUCKETS],
 
 #pragma HLS DATAFLOW
   get_new_tuple(relS, tuple_stream, numS);
-  search(buckets,
-         address_table1, address_table2, address_table3, address_table4,
-         tuple_stream, output_stream, eos, numS);
+  search(buckets, tuple_stream, lookup_stream, numS);
+  table_lookup(address_table1, address_table2, address_table3, address_table4, lookup_stream, output_stream, eos, numS);
   write_output(output_stream, eos, relRS, numResult);
 }
 
