@@ -54,7 +54,6 @@ bool eject_slot(bucket_t buckets[NUM_BUCKETS], hash_t hash, slotidx_t slot_idx)
 {
     bucket_t &bucket = buckets[hash];
     slot_t &slot = bucket.slots[slot_idx];
-
     assert(slot.status != 0); // slot must be occupied
 
     bucket_t &bucket_alt = buckets[slot.tag];
@@ -115,15 +114,11 @@ void select_slot(bucket_t buckets[NUM_BUCKETS],
         slot_t &slot2 = buckets[hash2_val].slots[slot_idx];
         if (eject_slot(buckets, hash1_val, slot_idx))
         {
-            std::cout << "ejected slot " << slot_idx << std::endl;
-
             start_at_empty_chain(address_table_sizes, slot_idx, hash2_val, &slot1, slot_out, insert_loc, head);
             return;
         }
         if (eject_slot(buckets, hash2_val, slot_idx))
         {
-            std::cout << "ejected slot " << slot_idx << std::endl;
-
             start_at_empty_chain(address_table_sizes, slot_idx, hash1_val, &slot2, slot_out, insert_loc, head);
             return;
         }
@@ -178,24 +173,20 @@ bool find_empty_slot(bucket_t buckets[NUM_BUCKETS],
                      atindex_t *insert_loc,
                      atindex_t *head)
 {
-        slotidx_t slot1_idx = buckets[hash1_val].collision_slot;
-        slotidx_t slot2_idx = buckets[hash2_val].collision_slot;
-        slot_t &slot1 = buckets[hash1_val].slots[slot1_idx];
-        slot_t &slot2 = buckets[hash2_val].slots[slot2_idx];
+    for (int slot_idx = 0; slot_idx < NUM_SLOTS; slot_idx++) {
+        slot_t &slot1 = buckets[hash1_val].slots[slot_idx];
+        slot_t &slot2 = buckets[hash2_val].slots[slot_idx];
         if (slot1.status == 0)
         {
-            buckets[hash1_val].collision_slot = (buckets[hash1_val].collision_slot + 1) % NUM_SLOTS;
-
-            start_at_empty_chain(address_table_sizes, slot1_idx, hash2_val, &slot1, slot_out, insert_loc, head);
+            start_at_empty_chain(address_table_sizes, slot_idx, hash2_val, &slot1, slot_out, insert_loc, head);
             return true;
         }
         if (slot2.status == 0)
         {
-            buckets[hash2_val].collision_slot = (buckets[hash2_val].collision_slot + 1) % NUM_SLOTS;
-
-            start_at_empty_chain(address_table_sizes, slot2_idx, hash1_val, &slot2, slot_out, insert_loc, head);
+            start_at_empty_chain(address_table_sizes, slot_idx, hash1_val, &slot2, slot_out, insert_loc, head);
             return true;
         }
+    }
     return false;
 }
 
@@ -213,9 +204,9 @@ void CHashJoin::Build(std::vector<input_tuple_t> &relR)
 
         slot_found = find_empty_slot(buckets, address_table_sizes, hash1_val, hash2_val, &insert_slot, &insert_loc, &head);
 
+
         if (!slot_found)
         {
-            std::cout << "slot not found for tuple with key " << tuple.key << std::endl;
             select_slot(buckets, address_table_sizes, hash1_val, hash2_val, &insert_slot, &insert_loc, &head);
         }
         insert_tuple_to_address_table(&address_tables[insert_slot], head, insert_loc, tuple.rid, tuple.key);
